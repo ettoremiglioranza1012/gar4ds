@@ -8,6 +8,24 @@ wheels/
 
 # Virtual environments
 .venv
+venv/
+env/
+.env
 
-# Ignore all data files
+# Data files (large datasets)
 /data/
+*.parquet
+!data/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# uv
+uv.lock
