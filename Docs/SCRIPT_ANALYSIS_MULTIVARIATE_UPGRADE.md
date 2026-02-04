@@ -31,18 +31,23 @@ The spatial autocorrelation analysis is **significantly enhanced** by incorporat
 
 ### Implemented Solution: Hybrid Approach
 
-**Strategy:** Focused visual narrative for PM10 + comprehensive statistical validation + regime definition
+**Strategy:** Comprehensive LISA analysis for all variables + focused visual narrative for PM10 + multivariate regime definition
 
-#### Component 1: Parallel LISA Analysis (All Variables)
+#### Component 1: Complete LISA Analysis (All Variables)
 
 **Global Moran's I:** Calculated for ALL variables (PM10, TEMP, BLH, WS, PRECIP, PRESS, RAD)
-- Purpose: Proves regressors are spatially structured (critical for model validation)
+- Purpose: Validates that all regressors are spatially structured (critical for spatial econometric models)
 - Output: CSV with Global Moran's I statistics and significance for each variable
-- Key Finding: All variables show significant spatial clustering (validates spatial econometric approach)
+- Key Finding: All variables show significant spatial clustering (p ≤ 0.002), confirming spatial dependencies
+
+**LISA (Local Moran's I):** Computed for ALL variables to identify local clusters
+- Purpose: Assess spatial clustering patterns in predictors (not just PM10)
+- Rationale: Spatially clustered predictors can influence spillover effects and model specification
+- Output: Complete LISA results saved for all 7 variables in detailed CSV
 
 **LISA Cluster Maps:** Generated ONLY for PM10
-- Rationale: Avoid visual clutter; focus narrative on pollution patterns
-- Meteorological variables: Statistical validation recorded, map generation skipped
+- Rationale: Avoid visual clutter; focus narrative on pollution patterns while maintaining statistical rigor for all predictors
+- Meteorological variables: Full LISA analysis performed, but map generation skipped for clarity
 - Output: Single PM10 LISA map showing High-High and Low-Low clusters
 
 ```python
@@ -51,21 +56,25 @@ for var in vars_to_analyze:
     # Always calculate Global Moran's I
     mi = Moran(var_means, w)
     
-    # Always run LISA
+    # Always run LISA (for all variables)
     lisa = Moran_Local(var_means, w)
+    
+    # Save LISA results to CSV (all variables)
+    save_lisa_results(lisa, var)
     
     # Conditional visualization
     if var == 'PM10':
         create_variable_lisa_map(...)  # Generate map
     else:
-        print("→ Meteorological variable - map generation skipped")
+        print("→ Meteorological variable - map generation skipped (statistical validation complete)")
 ```
 
 **Results:**
-- 7 variables analyzed statistically
-- 1 LISA cluster map generated (PM10 only)
-- Comparison plot showing spatial autocorrelation across all variables
-- Complete statistical validation in CSV format
+- 7 variables fully analyzed with both Global Moran's I and LISA
+- Complete identification of High-High, Low-Low, High-Low, and Low-High clusters for each variable
+- 1 LISA cluster map generated (PM10 only for visual clarity)
+- Comparison plot showing spatial autocorrelation strength across all variables
+- Complete statistical validation in CSV format including all LISA cluster assignments
 
 #### Component 2: Multivariate Clustering Analysis
 
