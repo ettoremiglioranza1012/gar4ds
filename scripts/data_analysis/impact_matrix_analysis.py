@@ -45,7 +45,7 @@ K_NEIGHBORS = 6
 
 # Paths
 SCRIPT_DIR = Path(__file__).parent
-PROJECT_DIR = SCRIPT_DIR.parent
+PROJECT_DIR = SCRIPT_DIR.parent.parent
 ASSETS_DIR = PROJECT_DIR / 'assets'
 RESULTS_DIR = PROJECT_DIR / 'results'
 DATA_DIR = PROJECT_DIR / 'data'

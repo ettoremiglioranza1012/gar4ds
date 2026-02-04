@@ -12,8 +12,8 @@ from pathlib import Path
 import sys
 
 # Create output directories if they don't exist
-ASSETS_DIR = Path(__file__).parent.parent / 'assets'
-RESULTS_DIR = Path(__file__).parent.parent / 'results'
+ASSETS_DIR = Path(__file__).parent.parent.parent / 'assets'
+RESULTS_DIR = Path(__file__).parent.parent.parent / 'results'
 ASSETS_DIR.mkdir(exist_ok=True)
 RESULTS_DIR.mkdir(exist_ok=True)
 
@@ -43,8 +43,8 @@ with open(output_file, 'w') as f:
     try:
         # 1. Load Data
         print("Loading data...")
-        spatial_df = pl.read_parquet('../data/spatial_pollution_matrix.parquet')
-        with open('../data/data_stations_metadata.json', 'r') as meta_file:
+        spatial_df = pl.read_parquet('../../data/spatial_pollution_matrix.parquet')
+        with open('../../data/data_stations_metadata.json', 'r') as meta_file:
             stations_meta = json.load(meta_file)
         
         # Convert metadata to a DataFrame for easy alignment
