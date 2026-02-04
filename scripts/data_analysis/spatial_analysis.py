@@ -8,14 +8,19 @@ import seaborn as sns
 from libpysal.weights import KNN, DistanceBand
 from esda.moran import Moran, Moran_Local
 from splot.esda import plot_moran, moran_scatterplot, lisa_cluster
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
 from pathlib import Path
 import sys
 
 # Create output directories if they don't exist
-ASSETS_DIR = Path(__file__).parent.parent.parent / 'assets'
-RESULTS_DIR = Path(__file__).parent.parent.parent / 'results'
-ASSETS_DIR.mkdir(exist_ok=True)
-RESULTS_DIR.mkdir(exist_ok=True)
+SCRIPT_DIR = Path(__file__).parent
+PROJECT_DIR = SCRIPT_DIR.parent.parent
+ASSETS_DIR = PROJECT_DIR / 'assets' / 'spatial_analysis'
+RESULTS_DIR = PROJECT_DIR / 'results' / 'spatial_analysis'
+ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Set up output file for text results
 output_file = RESULTS_DIR / 'spatial_analysis_results.txt'
@@ -34,6 +39,494 @@ class Tee:
         for f in self.files:
             f.flush()
 
+
+# ============================================================================
+# FUNCTION DEFINITIONS - Must be defined before main execution
+# ============================================================================
+
+def run_parallel_lisa_analysis(spatial_df, valid_stations, coords, w, 
+                               available_vars, meta_df, assets_dir, results_dir):
+    """
+    Run separate LISA analysis for each environmental variable.
+    This reveals which variables show spatial clustering patterns.
+    
+    REFINED STRATEGY:
+    - Global Moran's I: Calculated for ALL variables (proves regressors are spatially structured)
+    - LISA Cluster Maps: Generated ONLY for PM10 (focused visual narrative)
+    - Meteorological Variables: Statistical validation only, no map generation
+    """
+    print("\n[A1] Running LISA for each variable...")
+    
+    # Focus on key environmental variables
+    priority_vars = ['PM10', 'TEMP', 'BLH', 'WS', 'PRECIP', 'PRESS', 'RAD']
+    vars_to_analyze = [v for v in priority_vars if v in available_vars]
+    
+    if not vars_to_analyze:
+        print("    ⚠ No environmental variables found for analysis")
+        return
+    
+    print(f"    ✓ Analyzing: {vars_to_analyze}")
+    
+    # Store results for each variable
+    all_variable_results = []
+    global_stats = []
+    
+    for var in vars_to_analyze:
+        print(f"\n    --- Analyzing {var} ---")
+        
+        # Extract mean values for this variable
+        var_cols = [f'{var}_{s}' for s in valid_stations]
+        var_means = spatial_df.select(var_cols).mean().to_pandas().iloc[0].values
+        
+        # Global Moran's I
+        mi = Moran(var_means, w)
+        print(f"        Global Moran's I: {mi.I:.4f} (p={mi.p_sim:.4f})")
+        
+        global_stats.append({
+            'Variable': var,
+            'Morans_I': mi.I,
+            'P_value': mi.p_sim,
+            'Significant': 'Yes' if mi.p_sim < 0.05 else 'No',
+            'Pattern': 'Clustered' if mi.I > 0 and mi.p_sim < 0.05 else 
+                      'Dispersed' if mi.I < 0 and mi.p_sim < 0.05 else 'Random'
+        })
+        
+        # Local Moran's I (LISA)
+        lisa = Moran_Local(var_means, w)
+        
+        # Classify clusters
+        sig = lisa.p_sim < 0.05
+        hotspots = sig & (lisa.q == 1)  # High-High
+        coldspots = sig & (lisa.q == 3)  # Low-Low
+        high_low = sig & (lisa.q == 4)   # High-Low (outliers)
+        low_high = sig & (lisa.q == 2)   # Low-High (outliers)
+        
+        print(f"        High-High: {hotspots.sum()}, Low-Low: {coldspots.sum()}")
+        print(f"        High-Low: {high_low.sum()}, Low-High: {low_high.sum()}")
+        
+        # Store detailed results
+        for i, station in enumerate(valid_stations):
+            all_variable_results.append({
+                'Station': station,
+                'Variable': var,
+                'Mean_Value': var_means[i],
+                'Local_Morans_I': lisa.Is[i],
+                'P_value': lisa.p_sim[i],
+                'Cluster_Type': 'High-High' if hotspots[i] else
+                               'Low-Low' if coldspots[i] else
+                               'High-Low' if high_low[i] else
+                               'Low-High' if low_high[i] else
+                               'Not Significant',
+                'Significant': sig[i]
+            })
+        
+        # Visualization - only generate map for PM10
+        if var == 'PM10':
+            create_variable_lisa_map(var, var_means, coords, valid_stations, 
+                                    hotspots, coldspots, high_low, low_high,
+                                    assets_dir)
+            print(f"        ✓ LISA cluster map generated for {var}")
+        else:
+            print(f"        → Meteorological variable - map generation skipped (statistical validation only)")
+    
+    # Save global statistics
+    print(f"\n[A2] Saving results...")
+    global_df = pd.DataFrame(global_stats)
+    global_df.to_csv(results_dir / 'optionA_global_morans_I_by_variable.csv', index=False)
+    print(f"    ✓ Global Moran's I results saved (all variables for statistical validation)")
+    
+    # Save detailed LISA results
+    detailed_df = pd.DataFrame(all_variable_results)
+    detailed_df.to_csv(results_dir / 'optionA_lisa_results_all_variables.csv', index=False)
+    print(f"    ✓ Detailed LISA results saved (all variables)")
+    
+    # Create summary comparison plot
+    create_variable_comparison_plot(global_df, assets_dir)
+    
+    # Count how many maps were generated
+    pm10_count = sum(1 for v in vars_to_analyze if v == 'PM10')
+    print(f"\n    📊 Visual outputs: {pm10_count} LISA cluster map(s) generated (PM10 only)")
+    print(f"    📋 Meteorological variables: Statistical validation recorded, maps skipped")
+    
+    # Print summary
+    print(f"\n[A3] Summary of spatial patterns (all variables):")
+    print(global_df.to_string(index=False))
+
+
+def create_variable_lisa_map(var_name, var_means, coords, valid_stations,
+                             hotspots, coldspots, high_low, low_high, assets_dir):
+    """Create LISA cluster map for a specific variable"""
+    
+    fig, ax = plt.subplots(figsize=(14, 10))
+    
+    # Base plot - not significant
+    not_sig = ~(hotspots | coldspots | high_low | low_high)
+    if not_sig.sum() > 0:
+        ax.scatter(coords[not_sig, 0], coords[not_sig, 1],
+                  c='lightgrey', edgecolor='k', s=80, alpha=0.6,
+                  label='Not Significant', zorder=1)
+    
+    # Plot clusters
+    if hotspots.sum() > 0:
+        ax.scatter(coords[hotspots, 0], coords[hotspots, 1],
+                  c='red', edgecolor='k', s=150, label='High-High',
+                  zorder=3, marker='s')
+        # Annotate hotspots
+        for idx in np.where(hotspots)[0]:
+            ax.annotate(valid_stations[idx], (coords[idx, 0], coords[idx, 1]),
+                       fontsize=8, fontweight='bold',
+                       xytext=(3, 3), textcoords='offset points')
+    
+    if coldspots.sum() > 0:
+        ax.scatter(coords[coldspots, 0], coords[coldspots, 1],
+                  c='blue', edgecolor='k', s=150, label='Low-Low',
+                  zorder=3, marker='s')
+    
+    if high_low.sum() > 0:
+        ax.scatter(coords[high_low, 0], coords[high_low, 1],
+                  c='orange', edgecolor='k', s=120, label='High-Low (Outlier)',
+                  zorder=2, marker='^')
+    
+    if low_high.sum() > 0:
+        ax.scatter(coords[low_high, 0], coords[low_high, 1],
+                  c='cyan', edgecolor='k', s=120, label='Low-High (Outlier)',
+                  zorder=2, marker='v')
+    
+    ax.set_xlabel('Longitude', fontsize=12)
+    ax.set_ylabel('Latitude', fontsize=12)
+    ax.set_title(f'Spatial Clustering: {var_name}\n(LISA Analysis)', 
+                fontsize=14, fontweight='bold')
+    ax.legend(loc='best', fontsize=10)
+    ax.grid(True, linestyle='--', alpha=0.3)
+    
+    plt.tight_layout()
+    plot_path = assets_dir / f'optionA_lisa_map_{var_name}.png'
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    print(f"        ✓ Saved map: {plot_path.name}")
+    plt.close()
+
+
+def create_variable_comparison_plot(global_df, assets_dir):
+    """Create comparison plot of Moran's I across variables"""
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # Plot 1: Moran's I values
+    colors = ['red' if p < 0.05 else 'gray' for p in global_df['P_value']]
+    bars = ax1.barh(global_df['Variable'], global_df['Morans_I'], 
+                    color=colors, edgecolor='black')
+    ax1.axvline(x=0, color='black', linestyle='-', linewidth=0.8)
+    ax1.set_xlabel("Moran's I", fontsize=12)
+    ax1.set_title("Global Spatial Autocorrelation by Variable\n(Red = Significant p<0.05)",
+                 fontsize=13, fontweight='bold')
+    ax1.grid(axis='x', alpha=0.3)
+    
+    # Add value labels
+    for i, (var, val, p) in enumerate(zip(global_df['Variable'], 
+                                           global_df['Morans_I'],
+                                           global_df['P_value'])):
+        label = f"{val:.3f}*" if p < 0.05 else f"{val:.3f}"
+        ax1.text(val + 0.01, i, label, va='center', fontsize=9)
+    
+    # Plot 2: Pattern classification
+    pattern_counts = global_df['Pattern'].value_counts()
+    colors_pie = {'Clustered': '#e74c3c', 'Random': '#95a5a6', 'Dispersed': '#3498db'}
+    pie_colors = [colors_pie.get(p, 'gray') for p in pattern_counts.index]
+    
+    ax2.pie(pattern_counts.values, labels=pattern_counts.index,
+           autopct='%1.0f%%', colors=pie_colors, startangle=90,
+           textprops={'fontsize': 11, 'fontweight': 'bold'})
+    ax2.set_title('Spatial Pattern Distribution\n(Across All Variables)',
+                 fontsize=13, fontweight='bold')
+    
+    plt.tight_layout()
+    plot_path = assets_dir / 'optionA_variable_comparison.png'
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    print(f"    ✓ Comparison plot saved: {plot_path.name}")
+    plt.close()
+
+
+def run_multivariate_clustering(spatial_df, valid_stations, coords,
+                                available_vars, meta_df, assets_dir, results_dir):
+    """
+    Multivariate clustering analysis combining all environmental variables.
+    Identifies stations with similar meteorological profiles and overlays
+    them spatially.
+    
+    CRITICAL FOR REGIME DEFINITION:
+    - Defines "Source vs. Receptor" atmospheric regimes based on meteorological profiles
+    - K-Means clustering identifies distinct environmental conditions
+    - Cluster profiles are essential for understanding pollution dynamics
+    """
+    print("\n[C1] Preparing multivariate feature matrix...")
+    print("    (This analysis defines atmospheric regimes for source/receptor classification)")
+    
+    
+    # Select variables for clustering
+    cluster_vars = ['PM10', 'TEMP', 'BLH', 'WS', 'PRECIP', 'PRESS']
+    cluster_vars = [v for v in cluster_vars if v in available_vars]
+    
+    if len(cluster_vars) < 2:
+        print("    ⚠ Insufficient variables for multivariate analysis")
+        return
+    
+    print(f"    ✓ Using variables: {cluster_vars}")
+    
+    # Build feature matrix
+    feature_matrix = []
+    feature_names = []
+    
+    for var in cluster_vars:
+        var_cols = [f'{var}_{s}' for s in valid_stations]
+        var_means = spatial_df.select(var_cols).mean().to_pandas().iloc[0].values
+        feature_matrix.append(var_means)
+        feature_names.append(var)
+    
+    # Transpose: rows = stations, columns = variables
+    X = np.column_stack(feature_matrix)
+    
+    print(f"    ✓ Feature matrix shape: {X.shape} (stations × variables)")
+    
+    # Standardize features
+    print("\n[C2] Standardizing features...")
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    print(f"    ✓ Features standardized")
+    
+    # K-means clustering
+    print("\n[C3] Performing K-means clustering...")
+    optimal_k = determine_optimal_k(X_scaled, max_k=8)
+    print(f"    ✓ Optimal number of clusters: {optimal_k}")
+    
+    kmeans = KMeans(n_clusters=optimal_k, random_state=42, n_init=20)
+    cluster_labels = kmeans.fit_predict(X_scaled)
+    
+    # Count stations per cluster
+    unique, counts = np.unique(cluster_labels, return_counts=True)
+    print(f"\n    Cluster sizes:")
+    for c, count in zip(unique, counts):
+        print(f"      Cluster {c}: {count} stations")
+    
+    # PCA for visualization
+    print("\n[C4] Performing PCA for visualization...")
+    pca = PCA(n_components=2)
+    X_pca = pca.fit_transform(X_scaled)
+    print(f"    ✓ Explained variance: PC1={pca.explained_variance_ratio_[0]:.2%}, "
+          f"PC2={pca.explained_variance_ratio_[1]:.2%}")
+    
+    # Create results dataframe
+    results_df = pd.DataFrame({
+        'Station': valid_stations,
+        'Cluster': cluster_labels,
+        'Longitude': coords[:, 0],
+        'Latitude': coords[:, 1],
+        'PCA_1': X_pca[:, 0],
+        'PCA_2': X_pca[:, 1]
+    })
+    
+    # Add original variable values
+    for i, var in enumerate(cluster_vars):
+        results_df[var] = X[:, i]
+    
+    # Analyze cluster profiles
+    print("\n[C5] Analyzing cluster profiles...")
+    print("    (Defining atmospheric regimes for source/receptor classification)")
+    cluster_profiles = analyze_cluster_profiles(results_df, cluster_vars, cluster_labels)
+    
+    # Save results
+    print("\n[C6] Saving results...")
+    results_df.to_csv(results_dir / 'optionC_multivariate_clusters.csv', index=False)
+    cluster_profiles.to_csv(results_dir / 'optionC_cluster_profiles.csv', index=False)
+    print(f"    ✓ Cluster assignments saved (station-to-regime mapping)")
+    print(f"    ✓ Cluster profiles saved (regime environmental characteristics)")
+    
+    # Visualizations
+    print("\n[C7] Creating visualizations...")
+    create_pca_scatter(results_df, X_pca, cluster_labels, optimal_k, 
+                      pca.explained_variance_ratio_, assets_dir)
+    create_spatial_cluster_map(results_df, coords, cluster_labels, optimal_k, assets_dir)
+    create_cluster_heatmap(cluster_profiles, cluster_vars, assets_dir)
+    print(f"    ✓ Generated: PCA scatter, spatial cluster map, and regime heatmap")
+    
+    # Summary
+    print("\n" + "="*80)
+    print("[C8] CLUSTER PROFILE SUMMARY - ATMOSPHERIC REGIME DEFINITIONS")
+    print("="*80)
+    print("(Critical for identifying Source vs. Receptor station characteristics)\n")
+    print(cluster_profiles.to_string(index=False))
+    print("\n" + "="*80)
+
+
+def determine_optimal_k(X, max_k=10):
+    """Use elbow method to determine optimal number of clusters"""
+    inertias = []
+    K_range = range(2, min(max_k + 1, len(X) // 2))
+    
+    for k in K_range:
+        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+        kmeans.fit(X)
+        inertias.append(kmeans.inertia_)
+    
+    # Simple elbow detection: find maximum rate of change decrease
+    if len(inertias) > 2:
+        diffs = np.diff(inertias)
+        second_diffs = np.diff(diffs)
+        optimal_k = np.argmin(second_diffs) + 2  # +2 because we started at k=2
+    else:
+        optimal_k = 3  # Default
+    
+    return min(optimal_k, 6)  # Cap at 6 for interpretability
+
+
+def analyze_cluster_profiles(results_df, cluster_vars, cluster_labels):
+    """Calculate mean profile for each cluster"""
+    profiles = []
+    
+    for cluster_id in sorted(np.unique(cluster_labels)):
+        cluster_mask = results_df['Cluster'] == cluster_id
+        cluster_data = results_df[cluster_mask]
+        
+        profile = {'Cluster': cluster_id, 'N_Stations': cluster_mask.sum()}
+        
+        for var in cluster_vars:
+            profile[f'{var}_mean'] = cluster_data[var].mean()
+            profile[f'{var}_std'] = cluster_data[var].std()
+        
+        # Characterize cluster
+        if 'PM10' in cluster_vars:
+            pm10_mean = cluster_data['PM10'].mean()
+            if pm10_mean > results_df['PM10'].quantile(0.66):
+                profile['Characterization'] = 'High Pollution'
+            elif pm10_mean < results_df['PM10'].quantile(0.33):
+                profile['Characterization'] = 'Low Pollution'
+            else:
+                profile['Characterization'] = 'Medium Pollution'
+        
+        profiles.append(profile)
+    
+    return pd.DataFrame(profiles)
+
+
+def create_pca_scatter(results_df, X_pca, cluster_labels, n_clusters, 
+                       explained_var, assets_dir):
+    """Create PCA scatter plot colored by cluster"""
+    
+    fig, ax = plt.subplots(figsize=(12, 9))
+    
+    colors = plt.cm.tab10(np.linspace(0, 1, n_clusters))
+    
+    for cluster_id in range(n_clusters):
+        mask = cluster_labels == cluster_id
+        ax.scatter(X_pca[mask, 0], X_pca[mask, 1],
+                  c=[colors[cluster_id]], s=100, edgecolor='black',
+                  label=f'Cluster {cluster_id}', alpha=0.7)
+    
+    ax.set_xlabel(f'PC1 ({explained_var[0]:.1%} variance)', fontsize=12)
+    ax.set_ylabel(f'PC2 ({explained_var[1]:.1%} variance)', fontsize=12)
+    ax.set_title('Multivariate Station Clustering\n(PCA Projection)', 
+                fontsize=14, fontweight='bold')
+    ax.legend(loc='best', fontsize=10)
+    ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plot_path = assets_dir / 'optionC_pca_clusters.png'
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    print(f"    ✓ PCA scatter saved")
+    plt.close()
+
+
+def create_spatial_cluster_map(results_df, coords, cluster_labels, n_clusters, assets_dir):
+    """Create spatial map colored by cluster membership"""
+    
+    fig, ax = plt.subplots(figsize=(14, 10))
+    
+    colors = plt.cm.tab10(np.linspace(0, 1, n_clusters))
+    
+    for cluster_id in range(n_clusters):
+        mask = cluster_labels == cluster_id
+        if mask.sum() > 0:
+            cluster_coords = coords[mask]
+            ax.scatter(cluster_coords[:, 0], cluster_coords[:, 1],
+                      c=[colors[cluster_id]], s=150, edgecolor='black',
+                      linewidth=1.5, label=f'Cluster {cluster_id}',
+                      alpha=0.8, zorder=3)
+            
+            # Annotate some stations in each cluster
+            cluster_stations = results_df[mask]['Station'].values
+            for i, (lon, lat) in enumerate(cluster_coords[:3]):  # Annotate first 3
+                ax.annotate(cluster_stations[i], (lon, lat),
+                           fontsize=8, xytext=(3, 3), textcoords='offset points')
+    
+    ax.set_xlabel('Longitude', fontsize=12)
+    ax.set_ylabel('Latitude', fontsize=12)
+    ax.set_title('Spatial Distribution of Multivariate Clusters\n'
+                '(Stations with similar environmental profiles)',
+                fontsize=14, fontweight='bold')
+    ax.legend(loc='best', fontsize=10, ncol=2)
+    ax.grid(True, linestyle='--', alpha=0.3)
+    
+    plt.tight_layout()
+    plot_path = assets_dir / 'optionC_spatial_clusters.png'
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    print(f"    ✓ Spatial cluster map saved")
+    plt.close()
+
+
+def create_cluster_heatmap(cluster_profiles, cluster_vars, assets_dir):
+    """Create heatmap of cluster profiles"""
+    
+    # Extract mean values for heatmap
+    n_clusters = len(cluster_profiles)
+    mean_cols = [f'{var}_mean' for var in cluster_vars]
+    
+    if not all(col in cluster_profiles.columns for col in mean_cols):
+        print("    ⚠ Cannot create heatmap - missing columns")
+        return
+    
+    heatmap_data = cluster_profiles[mean_cols].values
+    
+    # Normalize by column (variable) for better visualization
+    from sklearn.preprocessing import MinMaxScaler
+    scaler = MinMaxScaler()
+    heatmap_normalized = scaler.fit_transform(heatmap_data.T).T
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    im = ax.imshow(heatmap_normalized, cmap='RdYlBu_r', aspect='auto')
+    
+    # Set ticks
+    ax.set_xticks(np.arange(len(cluster_vars)))
+    ax.set_yticks(np.arange(n_clusters))
+    ax.set_xticklabels(cluster_vars, fontsize=11)
+    ax.set_yticklabels([f'Cluster {i}' for i in range(n_clusters)], fontsize=11)
+    
+    # Rotate x labels
+    plt.setp(ax.get_xticklabels(), rotation=45, ha='right', rotation_mode='anchor')
+    
+    # Add colorbar
+    cbar = plt.colorbar(im, ax=ax)
+    cbar.set_label('Normalized Value\n(0=Low, 1=High)', fontsize=10)
+    
+    # Add text annotations
+    for i in range(n_clusters):
+        for j in range(len(cluster_vars)):
+            text = ax.text(j, i, f'{heatmap_normalized[i, j]:.2f}',
+                          ha='center', va='center', color='black', fontsize=9)
+    
+    ax.set_title('Cluster Environmental Profiles\n(Normalized Mean Values)',
+                fontsize=13, fontweight='bold')
+    
+    plt.tight_layout()
+    plot_path = assets_dir / 'optionC_cluster_heatmap.png'
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    print(f"    ✓ Cluster heatmap saved")
+    plt.close()
+
+
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
+
 # Open output file and redirect stdout
 with open(output_file, 'w') as f:
     # Create a Tee object that writes to both stdout and file
@@ -41,114 +534,86 @@ with open(output_file, 'w') as f:
     sys.stdout = Tee(sys.stdout, f)
     
     try:
-        # 1. Load Data
-        print("Loading data...")
-        spatial_df = pl.read_parquet('../../data/spatial_pollution_matrix.parquet')
-        with open('../../data/data_stations_metadata.json', 'r') as meta_file:
-            stations_meta = json.load(meta_file)
+        print("=" * 80)
+        print("MULTIVARIATE SPATIAL ANALYSIS")
+        print("=" * 80)
+        print("\n[1] Loading data...")
         
-        # Convert metadata to a DataFrame for easy alignment
+        # Load station metadata
+        with open(PROJECT_DIR / 'data' / 'data_stations_metadata.json', 'r') as meta_file:
+            stations_meta = json.load(meta_file)
         meta_df = pd.DataFrame(stations_meta).set_index('Station_ID')
         
-        # 2. Align Data and Coordinates
-        # Extract the list of stations from the pollution matrix (excluding 'Data' column)
-        data_stations = [c for c in spatial_df.columns if c != 'Data']
+        # Try new multi-variable dataset first, fallback to old if not available
+        data_dir = PROJECT_DIR / 'data'
+        if (data_dir / 'spatial_full_matrix.parquet').exists():
+            spatial_df = pl.read_parquet(data_dir / 'spatial_full_matrix.parquet')
+            print(f"    ✓ Loaded multi-variable dataset: {spatial_df.shape}")
+        else:
+            spatial_df = pl.read_parquet(data_dir / 'spatial_pollution_matrix.parquet')
+            print(f"    ✓ Loaded PM10-only dataset: {spatial_df.shape}")
+            
+        print("\n[2] Aligning data and coordinates...")
         
-        # Intersection of stations in both Data and Metadata
+        # Detect available variables in the dataset
+        all_columns = spatial_df.columns
+        available_vars = set()
+        station_var_map = {}
+        
+        for col in all_columns:
+            if col == 'Data':
+                continue
+            if '_' in col:
+                var, station = col.split('_', 1)
+                available_vars.add(var)
+                if station not in station_var_map:
+                    station_var_map[station] = []
+                station_var_map[station].append(var)
+        
+        # Get valid stations (those in both data and metadata)
+        data_stations = list(station_var_map.keys())
         valid_stations = [s for s in data_stations if s in meta_df.index]
-        print(f"Aligned {len(valid_stations)} stations for spatial analysis.")
         
-        # Extract the pollution vector (y) - Average PM10 over the entire period
-        # (You can also filter by specific dates, e.g., Winter 2024)
-        pm10_means = spatial_df.select(valid_stations).mean().to_pandas().iloc[0]
+        print(f"    ✓ Found {len(valid_stations)} valid stations")
+        print(f"    ✓ Available variables: {sorted(available_vars)}")
+        
+        # Extract coordinates
         coords = meta_df.loc[valid_stations, ['Longitude', 'Latitude']].values
         
         # 3. Define Spatial Weights Matrix (W)
-        # We use K-Nearest Neighbors (k=6) to ensure every station has connections
-        # Alternatively, use DistanceBand for a fixed radius (e.g., 50km)
+        print("\n[3] Creating spatial weights matrix...")
         w = KNN.from_array(coords, k=6)
         w.transform = 'r'  # Row-standardize weights
+        print(f"    ✓ KNN weights created (k=6)")
         
-        # 4. Global Moran's I
-        # Tests the null hypothesis of spatial randomness
-        mi = Moran(pm10_means, w)
-        print(f"\n--- Global Moran's I ---")
-        print(f"Index: {mi.I:.4f}")
-        print(f"P-value: {mi.p_sim:.4f}")
-        if mi.p_sim < 0.05:
-            print("Result: Significant spatial clustering detected.")
-        else:
-            print("Result: No significant spatial pattern (random distribution).")
+        # =====================================================================
+        # OPTION A: PARALLEL LISA ANALYSIS FOR EACH VARIABLE
+        # =====================================================================
+        print("\n" + "=" * 80)
+        print("OPTION A: PARALLEL SPATIAL ANALYSIS FOR EACH VARIABLE")
+        print("=" * 80)
         
-        # 5. Local Moran's I (LISA)
-        # Identifies specific clusters (High-High, Low-Low) and outliers
-        lisa = Moran_Local(pm10_means, w)
+        run_parallel_lisa_analysis(spatial_df, valid_stations, coords, w, 
+                                   available_vars, meta_df, ASSETS_DIR, RESULTS_DIR)
         
-        # Classify clusters (at p < 0.05 significance)
-        # 1=HH, 2=LH, 3=LL, 4=HL
-        sig = lisa.p_sim < 0.05
-        hotspots = sig & (lisa.q == 1)  # High-High
-        coldspots = sig & (lisa.q == 3) # Low-Low
+        # =====================================================================
+        # OPTION C: MULTIVARIATE CLUSTERING ANALYSIS
+        # =====================================================================
+        print("\n" + "=" * 80)
+        print("OPTION C: MULTIVARIATE CLUSTERING ANALYSIS")
+        print("=" * 80)
         
-        print(f"\n--- Local Spatial Clusters ---")
-        print(f"High-High Clusters (Hotspots): {hotspots.sum()} stations")
-        print(f"Low-Low Clusters (Coldspots): {coldspots.sum()} stations")
+        run_multivariate_clustering(spatial_df, valid_stations, coords, 
+                                    available_vars, meta_df, ASSETS_DIR, RESULTS_DIR)
         
-        # 6. Visualization
-        plt.figure(figsize=(14, 10))
-        
-        # Base plot of all stations
-        plt.scatter(meta_df.loc[valid_stations, 'Longitude'], 
-                    meta_df.loc[valid_stations, 'Latitude'], 
-                    c='lightgrey', edgecolor='k', s=50, label='Not Significant')
-        
-        # Plot Hotspots (Red)
-        if hotspots.sum() > 0:
-            plt.scatter(coords[hotspots, 0], coords[hotspots, 1], 
-                        c='red', edgecolor='k', s=100, label='High-High (Pollution Cluster)')
-            # Annotate HH stations
-            for idx in np.where(hotspots)[0]:
-                plt.annotate(valid_stations[idx], (coords[idx, 0], coords[idx, 1]), fontsize=9)
-        
-        # Plot Coldspots (Blue)
-        if coldspots.sum() > 0:
-            plt.scatter(coords[coldspots, 0], coords[coldspots, 1], 
-                        c='blue', edgecolor='k', s=100, label='Low-Low (Clean Cluster)')
-        
-        plt.title('Spatial Clustering of PM10 Concentrations (LISA Analysis)', fontsize=15)
-        plt.xlabel('Longitude')
-        plt.ylabel('Latitude')
-        plt.legend()
-        plt.grid(True, linestyle='--', alpha=0.5)
-        
-        # Save the plot
-        plot_path = ASSETS_DIR / 'spatial_clustering_lisa.png'
-        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-        print(f"\n[INFO] Plot saved to: {plot_path}")
-        
-        # Also show the plot (comment out if running headless)
-        # plt.show()
-        plt.close()
-        
-        # 7. Create Results DataFrame
-        results_df = pd.DataFrame({
-            'Station': valid_stations,
-            'PM10_Mean': pm10_means.values,
-            'Is_Hotspot': hotspots,
-            'Is_Coldspot': coldspots,
-            'Local_Moran_I': lisa.Is
-        }).sort_values('Local_Moran_I', ascending=False)
-        
-        print("\nTop 5 Stations contributing to Clustering:")
-        print(results_df.head(5))
-        
-        # Save results DataFrame to CSV
-        results_csv_path = RESULTS_DIR / 'spatial_clustering_results.csv'
-        results_df.to_csv(results_csv_path, index=False)
-        print(f"\n[INFO] Results DataFrame saved to: {results_csv_path}")
-        
-        print(f"\n[INFO] Text output saved to: {output_file}")
-        print("\n=== Analysis Complete ===")
+        # Analysis complete
+        print("\n" + "=" * 80)
+        print("ANALYSIS COMPLETE")
+        print("=" * 80)
+        print(f"\n    📁 Text Output: {output_file}")
+        print(f"    📊 CSV Results: {RESULTS_DIR}")
+        print(f"    🖼️  Visualizations: {ASSETS_DIR}")
+        print("\n")
         
     finally:
         # Restore original stdout

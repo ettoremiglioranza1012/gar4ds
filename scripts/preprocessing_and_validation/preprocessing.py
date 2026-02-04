@@ -109,7 +109,7 @@ def preprocess_data():
     # 3. MERGE AND SAVE
     # =========================================================================
     print("Merging datasets...")
-    full_matrix = appa_wide.join(ext_wide, on="Data", how="full").sort("Data")
+    full_matrix = appa_wide.join(ext_wide, on="Data", how="full", coalesce=True).sort("Data")
     
     print(f"Saving to {OUTPUT_FILE}...")
     if not os.path.exists(OUTPUT_DIR):
