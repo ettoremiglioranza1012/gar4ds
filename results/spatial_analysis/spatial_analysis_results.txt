@@ -1,0 +1,141 @@
+================================================================================
+MULTIVARIATE SPATIAL ANALYSIS
+================================================================================
+
+[1] Loading data...
+    ✓ Loaded multi-variable dataset: (96432, 253)
+
+[2] Aligning data and coordinates...
+    ✓ Found 36 valid stations
+    ✓ Available variables: ['BLH', 'PM10', 'PRECIP', 'PRESS', 'RAD', 'TEMP', 'WS']
+
+[3] Creating spatial weights matrix...
+    ✓ KNN weights created (k=6)
+
+================================================================================
+OPTION A: PARALLEL SPATIAL ANALYSIS FOR EACH VARIABLE
+================================================================================
+
+[A1] Running LISA for each variable...
+    ✓ Analyzing: ['PM10', 'TEMP', 'BLH', 'WS', 'PRECIP', 'PRESS', 'RAD']
+
+    --- Analyzing PM10 ---
+        Global Moran's I: 0.6012 (p=0.0010)
+        High-High: 6, Low-Low: 15
+        High-Low: 0, Low-High: 1
+        ✓ Saved map: optionA_lisa_map_PM10.png
+        ✓ LISA cluster map generated for PM10
+
+    --- Analyzing TEMP ---
+        Global Moran's I: 0.5283 (p=0.0010)
+        High-High: 5, Low-Low: 8
+        High-Low: 0, Low-High: 0
+        → Meteorological variable - map generation skipped (statistical validation only)
+
+    --- Analyzing BLH ---
+        Global Moran's I: 0.4666 (p=0.0010)
+        High-High: 5, Low-Low: 10
+        High-Low: 0, Low-High: 1
+        → Meteorological variable - map generation skipped (statistical validation only)
+
+    --- Analyzing WS ---
+        Global Moran's I: 0.6792 (p=0.0010)
+        High-High: 9, Low-Low: 15
+        High-Low: 0, Low-High: 1
+        → Meteorological variable - map generation skipped (statistical validation only)
+
+    --- Analyzing PRECIP ---
+        Global Moran's I: 0.2941 (p=0.0020)
+        High-High: 6, Low-Low: 3
+        High-Low: 0, Low-High: 0
+        → Meteorological variable - map generation skipped (statistical validation only)
+
+    --- Analyzing PRESS ---
+        Global Moran's I: 0.6565 (p=0.0010)
+        High-High: 12, Low-Low: 14
+        High-Low: 0, Low-High: 0
+        → Meteorological variable - map generation skipped (statistical validation only)
+
+    --- Analyzing RAD ---
+        Global Moran's I: 0.3189 (p=0.0020)
+        High-High: 3, Low-Low: 8
+        High-Low: 0, Low-High: 0
+        → Meteorological variable - map generation skipped (statistical validation only)
+
+[A2] Saving results...
+    ✓ Global Moran's I results saved (all variables for statistical validation)
+    ✓ Detailed LISA results saved (all variables)
+    ✓ Comparison plot saved: optionA_variable_comparison.png
+
+    📊 Visual outputs: 1 LISA cluster map(s) generated (PM10 only)
+    📋 Meteorological variables: Statistical validation recorded, maps skipped
+
+[A3] Summary of spatial patterns (all variables):
+Variable  Morans_I  P_value Significant   Pattern
+    PM10  0.601193    0.001         Yes Clustered
+    TEMP  0.528311    0.001         Yes Clustered
+     BLH  0.466606    0.001         Yes Clustered
+      WS  0.679211    0.001         Yes Clustered
+  PRECIP  0.294097    0.002         Yes Clustered
+   PRESS  0.656503    0.001         Yes Clustered
+     RAD  0.318917    0.002         Yes Clustered
+
+================================================================================
+OPTION C: MULTIVARIATE CLUSTERING ANALYSIS
+================================================================================
+
+[C1] Preparing multivariate feature matrix...
+    (This analysis defines atmospheric regimes for source/receptor classification)
+    ✓ Using variables: ['PM10', 'TEMP', 'BLH', 'WS', 'PRECIP', 'PRESS']
+    ✓ Feature matrix shape: (36, 6) (stations × variables)
+
+[C2] Standardizing features...
+    ✓ Features standardized
+
+[C3] Performing K-means clustering...
+    ✓ Optimal number of clusters: 4
+
+    Cluster sizes:
+      Cluster 0: 13 stations
+      Cluster 1: 10 stations
+      Cluster 2: 6 stations
+      Cluster 3: 7 stations
+
+[C4] Performing PCA for visualization...
+    ✓ Explained variance: PC1=63.67%, PC2=26.37%
+
+[C5] Analyzing cluster profiles...
+    (Defining atmospheric regimes for source/receptor classification)
+
+[C6] Saving results...
+    ✓ Cluster assignments saved (station-to-regime mapping)
+    ✓ Cluster profiles saved (regime environmental characteristics)
+
+[C7] Creating visualizations...
+    ✓ PCA scatter saved
+    ✓ Spatial cluster map saved
+    ✓ Cluster heatmap saved
+    ✓ Generated: PCA scatter, spatial cluster map, and regime heatmap
+
+================================================================================
+[C8] CLUSTER PROFILE SUMMARY - ATMOSPHERIC REGIME DEFINITIONS
+================================================================================
+(Critical for identifying Source vs. Receptor station characteristics)
+
+ Cluster  N_Stations  PM10_mean  PM10_std  TEMP_mean  TEMP_std   BLH_mean   BLH_std  WS_mean   WS_std  PRECIP_mean  PRECIP_std    PRESS_mean   PRESS_std Characterization
+       0          13  29.557617  2.830342 286.584503  0.822427 320.857894 11.678782 1.578924 0.397490     0.000143    0.000009  99498.163466 1665.994180   High Pollution
+       1          10  18.949997  3.830323 281.821429  2.756602 328.613442 14.882939 0.804956 0.204406     0.000173    0.000010  89685.772340 3989.793024    Low Pollution
+       2           6  16.841273  1.723562 281.368835  2.512197 400.778492 10.076494 0.716574 0.096738     0.000127    0.000003  88846.139921 3078.160349    Low Pollution
+       3           7  30.838288  2.527173 287.490197  0.191307 388.647683  8.296313 1.678956 0.076157     0.000117    0.000015 100379.767556  437.390261   High Pollution
+
+================================================================================
+
+================================================================================
+ANALYSIS COMPLETE
+================================================================================
+
+    📁 Text Output: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_analysis/spatial_analysis_results.txt
+    📊 CSV Results: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_analysis
+    🖼️  Visualizations: /Users/ettoremiglioranza/Projects/gar4ds/assets/spatial_analysis
+
+

@@ -39,111 +39,9 @@ class Tee:
         for f in self.files:
             f.flush()
 
-# Open output file and redirect stdout
-with open(output_file, 'w') as f:
-    # Create a Tee object that writes to both stdout and file
-    original_st=" * 80)
-        print("MULTIVARIATE SPATIAL ANALYSIS")
-        print("=" * 80)
-        print("\n[1] Loading data...")
-        
-        # Try new multi-variable dataset first, fallback to old if not available
-        data_dir = PROJECT_DIR / 'data'
-        if (data_dir / 'spatial_full_matrix.parquet').exists():
-            spatial_df = pl.read_parquet(data_dir / 'spatial_full_matrix.parquet')
-            print(f"    ✓ Loaded multi-variable dataset: {spatial_df.shape}")
-        else:
-            spatial_df = pl.read_parquet(data_dir / 'spatial_pollution_matrix.parquet')
-            print(f"    ✓ Loaded PM10-only dataset: {spatial_df.shape}")
-            
-        print("\n[2] Aligning data and coordinates...")
-        
-        # Detect available variables in the dataset
-        all_columns = spatial_df.columns
-        available_vars = set()
-        station_var_map = {}
-        
-        for col in all_columns:
-            if col == 'Data':
-                continue
-            if '_' in col:
-                var, station = col.split('_', 1)
-                available_vars.add(var)
-                if station not in station_var_map:
-                    station_var_map[station] = []
-                station_var_map[station].append(var)
-        
-        # Get valid stations (those in both data and metadata)
-        data_stations = list(station_var_map.keys())
-        valid_stations = [s for s in data_stations if s in meta_df.index]
-        
-        print(f"    ✓ Found {len(valid_stations)} valid stations")
-        print(f"    ✓ Available variables: {sorted(available_vars)}")
-        
-        # Extract coordinates
-        coords = meta_df.loc[valid_stations, ['Longitude', 'Latitude']].values
-        
-        # 3. Define Spatial Weights Matrix (W)
-        print("\n[3] Creating spatial weights matrix...")
-        w = KNN.from_array(coords, k=6)
-        w.transform = 'r'  # Row-standardize weights
-        print(f"    ✓ KNN weights created (k=6)")
-        
-        # =====================================================================
-        # OPTION A: PARALLEL LISA ANALYSIS FOR EACH VARIABLE
-        # =====================================================================
-        print("\n" + "=" * 80)
-        print("OPTION A: PARALLEL SPATIAL ANALYSIS FOR EACH VARIABLE")
-        print("=" * 80)
-        
-        run_parallel_lisa_analysis(spatial_df, valid_stations, coords, w, 
-                                   available_vars, meta_df, ASSETS_DIR, RESULTS_DIR)
-        
-        # =====================================================================
-        # OPTION C: MULTIVARIATE CLUSTERING ANALYSIS
-        # =====================================================================
-        print("\n" + "=" * 80)
-        print("OPTION C: MULTIVARIATE CLUSTERING ANALYSIS")
-        print("=" * 80)
-        
-        run_multivariate_clustering(spatial_df, valid_stations, coords, 
-                                    available_vars, meta_df, ASSETS_DIR, RESULTS_DIR
-            'Is_Hotspot': hotspots,
-            'Is_Coldspot': coldspots,
-            'Local_Moran_I': lisa.Is
-        }).sort_values('Local_Moran_I', ascending=False)
-        
-        print("\nTop 5 Stations contributing to Clustering:")
-        print(results_df.head(5))
-        
-        # Save results DataFrame to CSV
-        results_csv_path = RESULTS_DIR / 'spatial_clustering_results.csv'
-        results_df.to_csv(results_csv_path, index=False)
-        print(f"\n[INFO] Results DataFrame saved to: {results_csv_path}")
-        
-        print(f"\n[INFO] Text output saved to: {output_file}")
-        print("\n=== Analysis Complete ===")
-        
-    finally:
-        # Restore original stdout
-        sys.stdout = original_stdout
-
-print(f"Script completed successfully. Check {RESULTS_DIR} for outputs and {ASSETS_DIR} for plots.")
-" + "=" * 80)
-        print("ANALYSIS COMPLETE")
-        print("=" * 80)
-        print(f"\n    📁 Text Output: {output_file}")
-        print(f"    📊 CSV Results: {RESULTS_DIR}")
-        print(f"    🖼️  Visualizations: {ASSETS_DIR}")
-        print("\n")
-        
-    finally:
-        # Restore original stdout
-        sys.stdout = original_stdout
-
 
 # ============================================================================
-# OPTION A: PARALLEL LISA ANALYSIS FUNCTIONS
+# FUNCTION DEFINITIONS - Must be defined before main execution
 # ============================================================================
 
 def run_parallel_lisa_analysis(spatial_df, valid_stations, coords, w, 
@@ -151,6 +49,11 @@ def run_parallel_lisa_analysis(spatial_df, valid_stations, coords, w,
     """
     Run separate LISA analysis for each environmental variable.
     This reveals which variables show spatial clustering patterns.
+    
+    REFINED STRATEGY:
+    - Global Moran's I: Calculated for ALL variables (proves regressors are spatially structured)
+    - LISA Cluster Maps: Generated ONLY for PM10 (focused visual narrative)
+    - Meteorological Variables: Statistical validation only, no map generation
     """
     print("\n[A1] Running LISA for each variable...")
     
@@ -217,27 +120,36 @@ def run_parallel_lisa_analysis(spatial_df, valid_stations, coords, w,
                 'Significant': sig[i]
             })
         
-        # Visualization for this variable
-        create_variable_lisa_map(var, var_means, coords, valid_stations, 
-                                hotspots, coldspots, high_low, low_high,
-                                assets_dir)
+        # Visualization - only generate map for PM10
+        if var == 'PM10':
+            create_variable_lisa_map(var, var_means, coords, valid_stations, 
+                                    hotspots, coldspots, high_low, low_high,
+                                    assets_dir)
+            print(f"        ✓ LISA cluster map generated for {var}")
+        else:
+            print(f"        → Meteorological variable - map generation skipped (statistical validation only)")
     
     # Save global statistics
     print(f"\n[A2] Saving results...")
     global_df = pd.DataFrame(global_stats)
     global_df.to_csv(results_dir / 'optionA_global_morans_I_by_variable.csv', index=False)
-    print(f"    ✓ Global Moran's I results saved")
+    print(f"    ✓ Global Moran's I results saved (all variables for statistical validation)")
     
     # Save detailed LISA results
     detailed_df = pd.DataFrame(all_variable_results)
     detailed_df.to_csv(results_dir / 'optionA_lisa_results_all_variables.csv', index=False)
-    print(f"    ✓ Detailed LISA results saved")
+    print(f"    ✓ Detailed LISA results saved (all variables)")
     
     # Create summary comparison plot
     create_variable_comparison_plot(global_df, assets_dir)
     
+    # Count how many maps were generated
+    pm10_count = sum(1 for v in vars_to_analyze if v == 'PM10')
+    print(f"\n    📊 Visual outputs: {pm10_count} LISA cluster map(s) generated (PM10 only)")
+    print(f"    📋 Meteorological variables: Statistical validation recorded, maps skipped")
+    
     # Print summary
-    print(f"\n[A3] Summary of spatial patterns:")
+    print(f"\n[A3] Summary of spatial patterns (all variables):")
     print(global_df.to_string(index=False))
 
 
@@ -334,18 +246,21 @@ def create_variable_comparison_plot(global_df, assets_dir):
     plt.close()
 
 
-# ============================================================================
-# OPTION C: MULTIVARIATE CLUSTERING FUNCTIONS
-# ============================================================================
-
 def run_multivariate_clustering(spatial_df, valid_stations, coords,
                                 available_vars, meta_df, assets_dir, results_dir):
     """
     Multivariate clustering analysis combining all environmental variables.
     Identifies stations with similar meteorological profiles and overlays
     them spatially.
+    
+    CRITICAL FOR REGIME DEFINITION:
+    - Defines "Source vs. Receptor" atmospheric regimes based on meteorological profiles
+    - K-Means clustering identifies distinct environmental conditions
+    - Cluster profiles are essential for understanding pollution dynamics
     """
     print("\n[C1] Preparing multivariate feature matrix...")
+    print("    (This analysis defines atmospheric regimes for source/receptor classification)")
+    
     
     # Select variables for clustering
     cluster_vars = ['PM10', 'TEMP', 'BLH', 'WS', 'PRECIP', 'PRESS']
@@ -415,14 +330,15 @@ def run_multivariate_clustering(spatial_df, valid_stations, coords,
     
     # Analyze cluster profiles
     print("\n[C5] Analyzing cluster profiles...")
+    print("    (Defining atmospheric regimes for source/receptor classification)")
     cluster_profiles = analyze_cluster_profiles(results_df, cluster_vars, cluster_labels)
     
     # Save results
     print("\n[C6] Saving results...")
     results_df.to_csv(results_dir / 'optionC_multivariate_clusters.csv', index=False)
     cluster_profiles.to_csv(results_dir / 'optionC_cluster_profiles.csv', index=False)
-    print(f"    ✓ Cluster assignments saved")
-    print(f"    ✓ Cluster profiles saved")
+    print(f"    ✓ Cluster assignments saved (station-to-regime mapping)")
+    print(f"    ✓ Cluster profiles saved (regime environmental characteristics)")
     
     # Visualizations
     print("\n[C7] Creating visualizations...")
@@ -430,10 +346,15 @@ def run_multivariate_clustering(spatial_df, valid_stations, coords,
                       pca.explained_variance_ratio_, assets_dir)
     create_spatial_cluster_map(results_df, coords, cluster_labels, optimal_k, assets_dir)
     create_cluster_heatmap(cluster_profiles, cluster_vars, assets_dir)
+    print(f"    ✓ Generated: PCA scatter, spatial cluster map, and regime heatmap")
     
     # Summary
-    print("\n[C8] Cluster Profile Summary:")
+    print("\n" + "="*80)
+    print("[C8] CLUSTER PROFILE SUMMARY - ATMOSPHERIC REGIME DEFINITIONS")
+    print("="*80)
+    print("(Critical for identifying Source vs. Receptor station characteristics)\n")
     print(cluster_profiles.to_string(index=False))
+    print("\n" + "="*80)
 
 
 def determine_optimal_k(X, max_k=10):
@@ -600,3 +521,102 @@ def create_cluster_heatmap(cluster_profiles, cluster_vars, assets_dir):
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     print(f"    ✓ Cluster heatmap saved")
     plt.close()
+
+
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
+
+# Open output file and redirect stdout
+with open(output_file, 'w') as f:
+    # Create a Tee object that writes to both stdout and file
+    original_stdout = sys.stdout
+    sys.stdout = Tee(sys.stdout, f)
+    
+    try:
+        print("=" * 80)
+        print("MULTIVARIATE SPATIAL ANALYSIS")
+        print("=" * 80)
+        print("\n[1] Loading data...")
+        
+        # Load station metadata
+        with open(PROJECT_DIR / 'data' / 'data_stations_metadata.json', 'r') as meta_file:
+            stations_meta = json.load(meta_file)
+        meta_df = pd.DataFrame(stations_meta).set_index('Station_ID')
+        
+        # Try new multi-variable dataset first, fallback to old if not available
+        data_dir = PROJECT_DIR / 'data'
+        if (data_dir / 'spatial_full_matrix.parquet').exists():
+            spatial_df = pl.read_parquet(data_dir / 'spatial_full_matrix.parquet')
+            print(f"    ✓ Loaded multi-variable dataset: {spatial_df.shape}")
+        else:
+            spatial_df = pl.read_parquet(data_dir / 'spatial_pollution_matrix.parquet')
+            print(f"    ✓ Loaded PM10-only dataset: {spatial_df.shape}")
+            
+        print("\n[2] Aligning data and coordinates...")
+        
+        # Detect available variables in the dataset
+        all_columns = spatial_df.columns
+        available_vars = set()
+        station_var_map = {}
+        
+        for col in all_columns:
+            if col == 'Data':
+                continue
+            if '_' in col:
+                var, station = col.split('_', 1)
+                available_vars.add(var)
+                if station not in station_var_map:
+                    station_var_map[station] = []
+                station_var_map[station].append(var)
+        
+        # Get valid stations (those in both data and metadata)
+        data_stations = list(station_var_map.keys())
+        valid_stations = [s for s in data_stations if s in meta_df.index]
+        
+        print(f"    ✓ Found {len(valid_stations)} valid stations")
+        print(f"    ✓ Available variables: {sorted(available_vars)}")
+        
+        # Extract coordinates
+        coords = meta_df.loc[valid_stations, ['Longitude', 'Latitude']].values
+        
+        # 3. Define Spatial Weights Matrix (W)
+        print("\n[3] Creating spatial weights matrix...")
+        w = KNN.from_array(coords, k=6)
+        w.transform = 'r'  # Row-standardize weights
+        print(f"    ✓ KNN weights created (k=6)")
+        
+        # =====================================================================
+        # OPTION A: PARALLEL LISA ANALYSIS FOR EACH VARIABLE
+        # =====================================================================
+        print("\n" + "=" * 80)
+        print("OPTION A: PARALLEL SPATIAL ANALYSIS FOR EACH VARIABLE")
+        print("=" * 80)
+        
+        run_parallel_lisa_analysis(spatial_df, valid_stations, coords, w, 
+                                   available_vars, meta_df, ASSETS_DIR, RESULTS_DIR)
+        
+        # =====================================================================
+        # OPTION C: MULTIVARIATE CLUSTERING ANALYSIS
+        # =====================================================================
+        print("\n" + "=" * 80)
+        print("OPTION C: MULTIVARIATE CLUSTERING ANALYSIS")
+        print("=" * 80)
+        
+        run_multivariate_clustering(spatial_df, valid_stations, coords, 
+                                    available_vars, meta_df, ASSETS_DIR, RESULTS_DIR)
+        
+        # Analysis complete
+        print("\n" + "=" * 80)
+        print("ANALYSIS COMPLETE")
+        print("=" * 80)
+        print(f"\n    📁 Text Output: {output_file}")
+        print(f"    📊 CSV Results: {RESULTS_DIR}")
+        print(f"    🖼️  Visualizations: {ASSETS_DIR}")
+        print("\n")
+        
+    finally:
+        # Restore original stdout
+        sys.stdout = original_stdout
+
+print(f"Script completed successfully. Check {RESULTS_DIR} for outputs and {ASSETS_DIR} for plots.")
