@@ -24,6 +24,7 @@ import seaborn as sns
 from libpysal.weights import KNN
 from spreg import ML_Lag
 from scipy import sparse
+from sklearn.preprocessing import StandardScaler
 import warnings
 from pathlib import Path
 import sys
@@ -48,12 +49,12 @@ K_NEIGHBORS = 6  # Number of nearest neighbors for spatial weights
 # Create output directories
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent.parent
-ASSETS_DIR = PROJECT_DIR / 'assets'
-RESULTS_DIR = PROJECT_DIR / 'results'
+ASSETS_DIR = PROJECT_DIR / 'assets' / 'spatial_durbin_model'
+RESULTS_DIR = PROJECT_DIR / 'results' / 'spatial_durbin_model'
 DATA_DIR = PROJECT_DIR / 'data'
 
-ASSETS_DIR.mkdir(exist_ok=True)
-RESULTS_DIR.mkdir(exist_ok=True)
+ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Output file for text results
 OUTPUT_FILE = RESULTS_DIR / 'durbin_spillover_analysis.txt'
@@ -75,14 +76,15 @@ class TeeOutput:
 
 
 def load_data():
-    """Load and prepare spatial pollution data and station metadata"""
+    """Load and prepare multi-variable spatial data and station metadata"""
     print("=" * 70)
     print("SPATIAL DURBIN MODEL: PM10 SPILLOVER ANALYSIS")
+    print("(Enhanced with Meteorological Variables)")
     print("=" * 70)
     print("\n[1] Loading Data...")
     
-    # Load spatial pollution matrix
-    spatial_df = pl.read_parquet(DATA_DIR / 'spatial_pollution_matrix.parquet')
+    # Load multi-variable spatial matrix (PM10, TEMP, BLH, WS, PRECIP, PRESS, RAD)
+    spatial_df = pl.read_parquet(DATA_DIR / 'spatial_full_matrix.parquet')
     
     # Load station metadata
     with open(DATA_DIR / 'data_stations_metadata.json', 'r') as f:
@@ -90,11 +92,14 @@ def load_data():
     
     meta_df = pd.DataFrame(stations_meta).set_index('Station_ID')
     
-    # Get valid stations (present in both datasets)
-    data_stations = [c for c in spatial_df.columns if c != 'Data']
+    # Get valid stations from PM10 columns
+    pm10_cols = [c for c in spatial_df.columns if c.startswith('PM10_')]
+    data_stations = [c.replace('PM10_', '') for c in pm10_cols]
     valid_stations = [s for s in data_stations if s in meta_df.index]
     
     print(f"    ✓ Loaded {len(valid_stations)} stations for analysis")
+    print(f"    ✓ Variables available: PM10, TEMP, BLH, WS, PRECIP, PRESS, RAD")
+    print(f"    ✓ Time series length: {len(spatial_df)} observations")
     
     # Check target stations availability
     available_targets = [s for s in TARGET_STATIONS if s in valid_stations]
@@ -122,59 +127,116 @@ def create_spatial_weights(meta_df, valid_stations, k=K_NEIGHBORS):
 
 
 def prepare_model_data(spatial_df, meta_df, valid_stations):
-    """Prepare dependent and independent variables for the spatial model"""
-    print("\n[3] Preparing Model Variables...")
+    """
+    Prepare multi-variable model with meteorological features.
+    
+    This is the KEY UPGRADE from the original model:
+    - Original: Used only Lat/Lon/Altitude (geographic proxies)
+    - New: Uses actual meteorological variables that drive pollution dispersion
+    
+    Independent variables:
+    - BLH (Boundary Layer Height): Low BLH traps pollutants
+    - TEMP (Temperature): Affects atmospheric stability
+    - WS (Wind Speed): Primary dispersion mechanism
+    - PRECIP (Precipitation): Wet deposition removes particulates
+    - PRESS (Pressure): Weather systems affect mixing
+    - RAD (Radiation): Photochemical reactions
+    - Altitude (optional): Terrain effects
+    """
+    print("\n[3] Preparing Multi-Variable Model...")
     
     # Dependent variable: Mean PM10 per station
-    pm10_means = spatial_df.select(valid_stations).mean().to_pandas().iloc[0]
+    pm10_cols = [f'PM10_{s}' for s in valid_stations]
+    pm10_means = spatial_df.select(pm10_cols).mean().to_pandas().iloc[0]
+    pm10_means.index = valid_stations  # Rename index to station names
     y = pm10_means.values.reshape(-1, 1)
     
-    # Independent variables: station characteristics
-    # Using available metadata features
-    X_cols = []
-    X_data = []
+    # Independent variables: Meteorological characteristics
+    feature_names = []
+    feature_data = []
     
-    # Latitude and Longitude as proxies for regional effects
-    if 'Latitude' in meta_df.columns:
-        X_data.append(meta_df.loc[valid_stations, 'Latitude'].values)
-        X_cols.append('Latitude')
+    # 1. Boundary Layer Height (critical for pollution dispersion)
+    blh_cols = [f'BLH_{s}' for s in valid_stations]
+    blh_means = spatial_df.select(blh_cols).mean().to_pandas().iloc[0]
+    feature_data.append(blh_means.values)
+    feature_names.append('BLH')
     
-    if 'Longitude' in meta_df.columns:
-        X_data.append(meta_df.loc[valid_stations, 'Longitude'].values)
-        X_cols.append('Longitude')
+    # 2. Temperature (affects atmospheric stability)
+    temp_cols = [f'TEMP_{s}' for s in valid_stations]
+    temp_means = spatial_df.select(temp_cols).mean().to_pandas().iloc[0]
+    feature_data.append(temp_means.values)
+    feature_names.append('TEMP')
     
-    # Altitude if available (important for pollution dispersion)
+    # 3. Wind Speed (primary dispersion mechanism)
+    ws_cols = [f'WS_{s}' for s in valid_stations]
+    ws_means = spatial_df.select(ws_cols).mean().to_pandas().iloc[0]
+    feature_data.append(ws_means.values)
+    feature_names.append('WS')
+    
+    # 4. Precipitation (wet deposition)
+    precip_cols = [f'PRECIP_{s}' for s in valid_stations]
+    precip_means = spatial_df.select(precip_cols).mean().to_pandas().iloc[0]
+    feature_data.append(precip_means.values)
+    feature_names.append('PRECIP')
+    
+    # 5. Pressure (weather systems)
+    press_cols = [f'PRESS_{s}' for s in valid_stations]
+    press_means = spatial_df.select(press_cols).mean().to_pandas().iloc[0]
+    feature_data.append(press_means.values)
+    feature_names.append('PRESS')
+    
+    # 6. Radiation (photochemical reactions)
+    rad_cols = [f'RAD_{s}' for s in valid_stations]
+    rad_means = spatial_df.select(rad_cols).mean().to_pandas().iloc[0]
+    feature_data.append(rad_means.values)
+    feature_names.append('RAD')
+    
+    # Optional: Add Altitude from metadata (terrain effects)
     if 'Altitude' in meta_df.columns:
-        X_data.append(meta_df.loc[valid_stations, 'Altitude'].values)
-        X_cols.append('Altitude')
+        feature_data.append(meta_df.loc[valid_stations, 'Altitude'].values)
+        feature_names.append('Altitude')
     
-    # If we have very few features, add a constant and polynomial terms
-    if len(X_data) < 2:
-        # Add constant term
-        X_data.append(np.ones(len(valid_stations)))
-        X_cols.append('Constant')
+    X = np.column_stack(feature_data)
     
-    X = np.column_stack(X_data)
+    # Standardize features (CRITICAL: mixed units - meters, Kelvin, m/s, Pa, W/m², etc.)
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
     
-    print(f"    ✓ Dependent variable (y): Mean PM10 concentration")
-    print(f"    ✓ Independent variables (X): {X_cols}")
-    print(f"    ✓ Observations: {len(y)}, Features: {X.shape[1]}")
+    print(f"    ✓ Dependent variable: PM10 (n={len(y)})")
+    print(f"    ✓ Independent variables: {feature_names}")
+    print(f"    ✓ Features standardized for comparable coefficients")
+    print(f"    ✓ Observations: {len(y)}, Features: {X_scaled.shape[1]}")
     
-    return y, X, X_cols, pm10_means
+    # Store raw feature means for interpretation
+    feature_means = {
+        'BLH': blh_means,
+        'TEMP': temp_means,
+        'WS': ws_means,
+        'PRECIP': precip_means,
+        'PRESS': press_means,
+        'RAD': rad_means
+    }
+    
+    return y, X_scaled, feature_names, pm10_means, scaler, feature_means
 
 
-def fit_spatial_durbin_model(y, X, w):
+def fit_spatial_durbin_model(y, X, w, feature_names):
     """
-    Fit Spatial Lag Model (approximation of Durbin Model)
+    Fit Spatial Lag Model with meteorological controls.
     
     The full Spatial Durbin Model includes both Wy and WX terms.
     We use ML_Lag which estimates ρ for the spatial lag (Wy).
+    
+    With meteorological variables, this model now captures:
+    - ρ: "Pure" spatial spillover AFTER controlling for weather
+    - β: Direct effects of local meteorology on local PM10
     """
-    print("\n[4] Fitting Spatial Durbin Model...")
+    print("\n[4] Fitting Spatial Durbin Model with Meteorological Controls...")
     print("    Model: y = ρWy + Xβ + ε")
+    print(f"    Controls: {feature_names}")
     
     # Fit Maximum Likelihood Spatial Lag model
-    model = ML_Lag(y, X, w=w, name_y='PM10_Mean', name_x=['X' + str(i) for i in range(X.shape[1])])
+    model = ML_Lag(y, X, w=w, name_y='PM10_Mean', name_x=feature_names)
     
     # Extract key parameters
     rho = model.rho  # Spatial autoregressive parameter
@@ -182,18 +244,15 @@ def fit_spatial_durbin_model(y, X, w):
     
     print(f"\n    --- Model Results ---")
     print(f"    Spatial Lag (ρ): {rho:.4f}")
-    print(f"    Interpretation: {rho*100:.1f}% of a station's PM10 is influenced by neighbors")
+    print(f"    Interpretation: {rho*100:.1f}% of PM10 variance from spatial spillover")
+    print(f"    → This is 'pure spillover' AFTER accounting for meteorology")
     
     if rho > 0.5:
-        print(f"    ⚠ HIGH SPILLOVER: Spatial dependence is dominant!")
+        print(f"    ⚠ HIGH SPILLOVER: Spatial dependence remains dominant even after controls!")
     elif rho > 0.3:
-        print(f"    → MODERATE SPILLOVER: Significant spatial effects")
+        print(f"    → MODERATE SPILLOVER: Significant spatial effects beyond meteorology")
     else:
-        print(f"    → LOW SPILLOVER: Local factors dominate")
-    
-    print(f"\n    Coefficients (β):")
-    for i, b in enumerate(betas):
-        print(f"      β{i}: {b:.4f}")
+        print(f"    → LOW SPILLOVER: Meteorological factors explain most variation")
     
     print(f"\n    Model Fit:")
     print(f"      Log-Likelihood: {model.logll:.4f}")
@@ -202,17 +261,77 @@ def fit_spatial_durbin_model(y, X, w):
     return model, rho, betas
 
 
+def interpret_meteorological_effects(betas, feature_names, rho):
+    """
+    Interpret how meteorological variables affect PM10.
+    
+    Since features are standardized, coefficients represent:
+    "Effect of 1 standard deviation change in X on PM10"
+    """
+    print("\n[5] Meteorological Influence Analysis...")
+    
+    print(f"\n    Direct Effects (own-station meteorology → own PM10):")
+    print(f"    {'Variable':<12} {'Coef':<12} {'Interpretation'}")
+    print(f"    {'-'*70}")
+    
+    # betas[0] is constant, betas[1:] are feature coefficients
+    for i, name in enumerate(feature_names):
+        beta = betas[i + 1]  # Skip constant
+        
+        if name == 'BLH':
+            if beta < 0:
+                interp = "↑ BLH → ↑ dispersion → ↓ PM10 ✓"
+            else:
+                interp = "⚠ Unexpected positive (check data)"
+        elif name == 'WS':
+            if beta < 0:
+                interp = "↑ Wind → ↑ dispersion → ↓ PM10 ✓"
+            else:
+                interp = "⚠ May indicate pollution transport"
+        elif name == 'PRECIP':
+            if beta < 0:
+                interp = "↑ Rain → ↑ washout → ↓ PM10 ✓"
+            else:
+                interp = "⚠ Unexpected (check precipitation units)"
+        elif name == 'TEMP':
+            interp = "Complex: affects stability + chemistry"
+        elif name == 'PRESS':
+            if beta > 0:
+                interp = "↑ Pressure → stable air → ↑ PM10"
+            else:
+                interp = "↓ Pressure → mixing → ↓ PM10"
+        elif name == 'RAD':
+            interp = "Photochemistry: can increase/decrease"
+        elif name == 'Altitude':
+            if beta < 0:
+                interp = "Higher elevation → cleaner air ✓"
+            else:
+                interp = "Valley effect or transport"
+        else:
+            interp = ""
+        
+        sign = "+" if beta > 0 else ""
+        print(f"    {name:<12} {sign}{beta:<11.4f} {interp}")
+    
+    print(f"\n    Spatial Spillover Parameter (ρ): {rho:.4f}")
+    print(f"    → This is the 'contagion' effect INDEPENDENT of local meteorology")
+    print(f"    → With ρ={rho:.4f}, {rho*100:.1f}% of PM10 comes from neighbors")
+
+
 def decompose_spillover(y, X, w, rho, betas, valid_stations, target_stations):
     """
-    Decompose PM10 predictions into local and spillover components
+    Decompose PM10 predictions into local and spillover components.
     
     For each station i:
-    - Local Effect: X_i * β (own characteristics)
+    - Local Effect: X_i * β (own meteorological characteristics)
     - Spatial Spillover: ρ * Σ(w_ij * y_j) (from neighbors)
+    
+    With meteorological variables, the local effect now represents:
+    - How local weather conditions (BLH, WS, TEMP, etc.) affect local PM10
     
     Total predicted: ŷ_i ≈ Local + Spillover
     """
-    print("\n[5] Decomposing PM10 into Local and Spillover Components...")
+    print("\n[6] Decomposing PM10 into Local (Meteo) and Spillover Components...")
     
     y_flat = y.flatten()
     n = len(y_flat)
@@ -262,12 +381,16 @@ def decompose_spillover(y, X, w, rho, betas, valid_stations, target_stations):
     return decomposition_df, W
 
 
-def identify_spillover_sources(decomposition_df, W, valid_stations, target_stations, y):
+def identify_spillover_sources(decomposition_df, W, valid_stations, target_stations, y, feature_means):
     """
     Identify which neighboring stations contribute most to spillover
-    for each target station
+    for each target station, WITH METEOROLOGICAL CONTEXT.
+    
+    Enhanced analysis includes:
+    - WHY each neighbor contributes (high emissions vs favorable transport)
+    - Meteorological profile of top sources
     """
-    print("\n[6] Identifying Spillover Sources for Target Stations...")
+    print("\n[7] Identifying Spillover Sources with Meteorological Context...")
     
     y_flat = y.flatten()
     station_to_idx = {s: i for i, s in enumerate(valid_stations)}
@@ -282,23 +405,38 @@ def identify_spillover_sources(decomposition_df, W, valid_stations, target_stati
         idx = station_to_idx[target]
         target_row = decomposition_df[decomposition_df['Station'] == target].iloc[0]
         
-        print(f"\n    {'='*60}")
+        print(f"\n    {'='*70}")
         print(f"    TARGET: {target}")
-        print(f"    {'='*60}")
+        print(f"    {'='*70}")
         print(f"    Observed PM10: {target_row['Observed_PM10']:.2f} μg/m³")
         print(f"    Spatial Spillover Received: {target_row['Spatial_Spillover']:.2f} μg/m³ "
               f"({target_row['Spillover_Pct']:.1f}%)")
         
-        # Get neighbor contributions
+        # Get neighbor contributions WITH meteorological context
         neighbor_contributions = []
         for j in range(len(valid_stations)):
             if W[idx, j] > 0:  # j is a neighbor of target
+                neighbor_station = valid_stations[j]
                 contribution = W[idx, j] * y_flat[j]  # Weight × neighbor's PM10
+                
+                # Get meteorological profile of neighbor
+                neighbor_blh = feature_means['BLH'].iloc[j]
+                neighbor_ws = feature_means['WS'].iloc[j]
+                neighbor_temp = feature_means['TEMP'].iloc[j]
+                
+                # Classify pollution mechanism
+                mechanism = classify_pollution_mechanism(
+                    y_flat[j], neighbor_blh, neighbor_ws
+                )
+                
                 neighbor_contributions.append({
-                    'Neighbor': valid_stations[j],
+                    'Neighbor': neighbor_station,
                     'Weight': W[idx, j],
                     'Neighbor_PM10': y_flat[j],
-                    'Contribution': contribution
+                    'Contribution': contribution,
+                    'BLH': neighbor_blh,
+                    'WindSpeed': neighbor_ws,
+                    'Mechanism': mechanism
                 })
         
         contrib_df = pd.DataFrame(neighbor_contributions)
@@ -308,26 +446,48 @@ def identify_spillover_sources(decomposition_df, W, valid_stations, target_stati
         total_spillover = target_row['Wy_Raw']
         contrib_df['Pct_of_Spillover'] = (contrib_df['Contribution'] / total_spillover) * 100
         
-        print(f"\n    Top Contributing Neighbors:")
-        print(f"    {'Neighbor':<35} {'Weight':<8} {'PM10':<10} {'Contrib':<10} {'%Spill':<8}")
-        print("    " + "-" * 71)
+        print(f"\n    Top Contributing Neighbors (with Weather Context):")
+        print(f"    {'Neighbor':<30} {'PM10':<8} {'BLH':<8} {'WS':<6} {'Contrib':<8} {'Mechanism'}")
+        print("    " + "-" * 85)
         
-        for _, row in contrib_df.head(6).iterrows():
-            print(f"    {row['Neighbor']:<35} {row['Weight']:<8.3f} {row['Neighbor_PM10']:<10.2f} "
-                  f"{row['Contribution']:<10.2f} {row['Pct_of_Spillover']:<8.1f}%")
+        for _, row in contrib_df.head(8).iterrows():
+            print(f"    {row['Neighbor']:<30} {row['Neighbor_PM10']:<8.1f} {row['BLH']:<8.1f} "
+                  f"{row['WindSpeed']:<6.2f} {row['Contribution']:<8.2f} {row['Mechanism']}")
         
         spillover_sources[target] = contrib_df
         
-        # Save to CSV
+        # Save to CSV (with meteorological context)
         csv_path = RESULTS_DIR / f"spillover_sources_{target.replace(' ', '_').replace(',', '').replace('/', '_')}.csv"
         contrib_df.to_csv(csv_path, index=False)
     
     return spillover_sources
 
 
+def classify_pollution_mechanism(pm10, blh, ws):
+    """
+    Classify HOW a station becomes a pollution source.
+    
+    Categories:
+    - High emitter + wind transport: High PM10, high wind
+    - High emitter + low mixing: High PM10, low BLH
+    - Transport corridor: Lower PM10 but high wind (passes pollution through)
+    - Atmospheric trapping: Low BLH traps whatever is emitted
+    """
+    if pm10 > 30 and ws > 2.0:
+        return "High emitter + wind transport"
+    elif pm10 > 30 and blh < 350:
+        return "High emitter + low mixing"
+    elif pm10 < 25 and ws > 2.5:
+        return "Transport corridor"
+    elif blh < 300:
+        return "Atmospheric trapping"
+    else:
+        return "Mixed factors"
+
+
 def calculate_network_centrality(W, valid_stations, decomposition_df):
     """Calculate network centrality metrics to identify key pollution hubs"""
-    print("\n[7] Calculating Network Centrality Metrics...")
+    print("\n[8] Calculating Network Centrality Metrics...")
     
     n = len(valid_stations)
     
@@ -371,7 +531,7 @@ def calculate_network_centrality(W, valid_stations, decomposition_df):
 def create_visualizations(decomposition_df, spillover_sources, centrality_df, 
                           meta_df, valid_stations, target_stations, coords, W):
     """Create comprehensive visualizations of spillover analysis"""
-    print("\n[8] Creating Visualizations...")
+    print("\n[9] Creating Visualizations...")
     
     # Set style
     plt.style.use('seaborn-v0_8-whitegrid')
@@ -595,7 +755,7 @@ def generate_summary_statistics(decomposition_df, target_stations, rho):
 
 def save_results(decomposition_df, centrality_df, target_stations):
     """Save all results to CSV files"""
-    print("\n[9] Saving Results...")
+    print("\n[10] Saving Results...")
     
     # Full decomposition
     decomposition_df.to_csv(RESULTS_DIR / 'station_spillover_decomposition.csv', index=False)
@@ -625,17 +785,20 @@ def main():
             # Create spatial weights
             w, coords = create_spatial_weights(meta_df, valid_stations)
             
-            # Prepare model data
-            y, X, X_cols, pm10_means = prepare_model_data(spatial_df, meta_df, valid_stations)
+            # Prepare model data with meteorological variables
+            y, X, feature_names, pm10_means, scaler, feature_means = prepare_model_data(spatial_df, meta_df, valid_stations)
             
-            # Fit Spatial Durbin Model
-            model, rho, betas = fit_spatial_durbin_model(y, X, w)
+            # Fit Spatial Durbin Model with meteorological controls
+            model, rho, betas = fit_spatial_durbin_model(y, X, w, feature_names)
+            
+            # Interpret meteorological effects
+            interpret_meteorological_effects(betas, feature_names, rho)
             
             # Decompose spillover effects
             decomposition_df, W = decompose_spillover(y, X, w, rho, betas, valid_stations, available_targets)
             
-            # Identify spillover sources
-            spillover_sources = identify_spillover_sources(decomposition_df, W, valid_stations, available_targets, y)
+            # Identify spillover sources with meteorological context
+            spillover_sources = identify_spillover_sources(decomposition_df, W, valid_stations, available_targets, y, feature_means)
             
             # Calculate network centrality
             centrality_df = calculate_network_centrality(W, valid_stations, decomposition_df)

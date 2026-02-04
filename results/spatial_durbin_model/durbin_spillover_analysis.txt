@@ -1,0 +1,232 @@
+======================================================================
+SPATIAL DURBIN MODEL: PM10 SPILLOVER ANALYSIS
+(Enhanced with Meteorological Variables)
+======================================================================
+
+[1] Loading Data...
+    ✓ Loaded 36 stations for analysis
+    ✓ Variables available: PM10, TEMP, BLH, WS, PRECIP, PRESS, RAD
+    ✓ Time series length: 96432 observations
+    ✓ Available target stations: ['Borgo Valsugana', 'Monte Gaza', 'Parco S. Chiara', 'Piana Rotaliana']
+
+[2] Creating Spatial Weights Matrix (K=6 neighbors)...
+    ✓ Created 36 x 36 spatial weights matrix
+    ✓ Average neighbors per station: 6.00
+
+[3] Preparing Multi-Variable Model...
+    ✓ Dependent variable: PM10 (n=36)
+    ✓ Independent variables: ['BLH', 'TEMP', 'WS', 'PRECIP', 'PRESS', 'RAD']
+    ✓ Features standardized for comparable coefficients
+    ✓ Observations: 36, Features: 6
+
+[4] Fitting Spatial Durbin Model with Meteorological Controls...
+    Model: y = ρWy + Xβ + ε
+    Controls: ['BLH', 'TEMP', 'WS', 'PRECIP', 'PRESS', 'RAD']
+
+    --- Model Results ---
+    Spatial Lag (ρ): 0.0757
+    Interpretation: 7.6% of PM10 variance from spatial spillover
+    → This is 'pure spillover' AFTER accounting for meteorology
+    → LOW SPILLOVER: Meteorological factors explain most variation
+
+    Model Fit:
+      Log-Likelihood: -85.1196
+      AIC: 186.2393
+
+[5] Meteorological Influence Analysis...
+
+    Direct Effects (own-station meteorology → own PM10):
+    Variable     Coef         Interpretation
+    ----------------------------------------------------------------------
+    BLH          -0.3798     ↑ BLH → ↑ dispersion → ↓ PM10 ✓
+    TEMP         -2.2052     Complex: affects stability + chemistry
+    WS           +0.7239      ⚠ May indicate pollution transport
+    PRECIP       -0.0884     ↑ Rain → ↑ washout → ↓ PM10 ✓
+    PRESS        +6.7710      ↑ Pressure → stable air → ↑ PM10
+    RAD          +1.0366      Photochemistry: can increase/decrease
+
+    Spatial Spillover Parameter (ρ): 0.0757
+    → This is the 'contagion' effect INDEPENDENT of local meteorology
+    → With ρ=0.0757, 7.6% of PM10 comes from neighbors
+
+[6] Decomposing PM10 into Local (Meteo) and Spillover Components...
+
+    --- Decomposition Summary ---
+    Station                        Observed   Local      Spillover    Spill%  
+    ----------------------------------------------------------------------
+    ⭐Borgo Valsugana              10.12      16.05      1.46         14.5    %
+    ⭐Monte Gaza                   22.56      14.17      1.47         6.5     %
+    ⭐Parco S. Chiara              19.66      18.77      1.40         7.1     %
+    ⭐Piana Rotaliana              22.98      17.10      1.46         6.3     %
+      Riva del Garda               18.59      16.89      1.52         8.2     %
+      Rovereto                     19.69      17.10      1.42         7.2     %
+      Via Bolzano                  18.50      17.89      1.52         8.2     %
+      A22_sud,_Termeno,_c/o_Maso_B 16.91      15.78      1.46         8.6     %
+      Brunico_1,_c/o_parcheggio_di 14.47      14.88      1.31         9.1     %
+      Bressanone,_c/o_Villa_Adele_ 15.48      13.47      1.30         8.4     %
+      Bolzano_4-Via_C.Augusta      19.19      18.01      1.36         7.1     %
+      Bolzano_5-P.zza_Adriano      16.81      18.01      1.39         8.3     %
+      Laces_1-Via_Stazione,_parche 17.14      16.28      1.40         8.2     %
+      Laives_1,_c/o_campi_sportivi 18.19      17.12      1.30         7.2     %
+      Merano_1,_Via_Trogman        17.18      16.10      1.40         8.2     %
+      Bergamo-via_Garibaldi_PM10   30.58      25.76      2.08         6.8     %
+      Brescia-Broletto_PM10        30.88      26.57      2.23         7.2     %
+      Calusco_d'Adda_PM10          26.35      26.17      2.23         8.5     %
+      Filago-via_Don_Milani_PM10   30.04      26.79      2.18         7.3     %
+      Lallio_PM10                  29.31      25.88      2.10         7.2     %
+      Mantova-p.zza_Gramsci_PM10   31.64      29.15      1.89         6.0     %
+      Mantova-S.Agnese_PM10        30.58      29.15      1.90         6.2     %
+      Osio_Sotto_PM10              28.74      26.79      2.10         7.3     %
+      Parona_PM10                  30.88      28.53      2.17         7.0     %
+      Pavia-p.zza_Minerva_PM10     34.87      28.92      2.21         6.3     %
+      Sannazzaro_de'_Burgondi-AGIP 28.98      28.58      2.28         7.9     %
+      Sarezzo-via_Minelli_PM10     27.41      23.42      2.12         7.7     %
+      Valmadrera_PM10              23.07      22.93      2.27         9.8     %
+      Vigevano-via_Valletta_PM10   32.11      28.53      2.16         6.7     %
+      Voghera-via_Pozzoni_PM10     26.80      27.27      2.31         8.6     %
+      Conegliano                   24.04      25.28      2.11         8.8     %
+      TV_Lancieri                  31.17      28.51      2.02         6.5     %
+      Mansue                       27.46      28.97      2.06         7.5     %
+      TV_S_Agnese                  33.47      28.29      1.99         5.9     %
+      Bissuola                     30.33      31.41      2.03         6.7     %
+      VE_Tagliamento               34.47      30.53      1.98         5.7     %
+
+[7] Identifying Spillover Sources with Meteorological Context...
+
+    ======================================================================
+    TARGET: Borgo Valsugana
+    ======================================================================
+    Observed PM10: 10.12 μg/m³
+    Spatial Spillover Received: 1.46 μg/m³ (14.5%)
+
+    Top Contributing Neighbors (with Weather Context):
+    Neighbor                       PM10     BLH      WS     Contrib  Mechanism
+    -------------------------------------------------------------------------------------
+    Piana Rotaliana                23.0     338.2    0.63   3.83     Mixed factors
+    Rovereto                       19.7     338.2    0.63   3.28     Mixed factors
+    Parco S. Chiara                19.7     319.9    0.74   3.28     Mixed factors
+    Via Bolzano                    18.5     330.7    0.70   3.08     Mixed factors
+    Laives_1,_c/o_campi_sportivi_z 18.2     409.7    0.65   3.03     Mixed factors
+    A22_sud,_Termeno,_c/o_Maso_Bin 16.9     390.7    0.74   2.82     Mixed factors
+
+    ======================================================================
+    TARGET: Monte Gaza
+    ======================================================================
+    Observed PM10: 22.56 μg/m³
+    Spatial Spillover Received: 1.47 μg/m³ (6.5%)
+
+    Top Contributing Neighbors (with Weather Context):
+    Neighbor                       PM10     BLH      WS     Contrib  Mechanism
+    -------------------------------------------------------------------------------------
+    Piana Rotaliana                23.0     338.2    0.63   3.83     Mixed factors
+    Rovereto                       19.7     338.2    0.63   3.28     Mixed factors
+    Parco S. Chiara                19.7     319.9    0.74   3.28     Mixed factors
+    Riva del Garda                 18.6     319.9    0.91   3.10     Mixed factors
+    Via Bolzano                    18.5     330.7    0.70   3.08     Mixed factors
+    A22_sud,_Termeno,_c/o_Maso_Bin 16.9     390.7    0.74   2.82     Mixed factors
+
+    ======================================================================
+    TARGET: Parco S. Chiara
+    ======================================================================
+    Observed PM10: 19.66 μg/m³
+    Spatial Spillover Received: 1.40 μg/m³ (7.1%)
+
+    Top Contributing Neighbors (with Weather Context):
+    Neighbor                       PM10     BLH      WS     Contrib  Mechanism
+    -------------------------------------------------------------------------------------
+    Piana Rotaliana                23.0     338.2    0.63   3.83     Mixed factors
+    Monte Gaza                     22.6     339.2    0.72   3.76     Mixed factors
+    Rovereto                       19.7     338.2    0.63   3.28     Mixed factors
+    Via Bolzano                    18.5     330.7    0.70   3.08     Mixed factors
+    A22_sud,_Termeno,_c/o_Maso_Bin 16.9     390.7    0.74   2.82     Mixed factors
+    Borgo Valsugana                10.1     315.1    0.66   1.69     Mixed factors
+
+    ======================================================================
+    TARGET: Piana Rotaliana
+    ======================================================================
+    Observed PM10: 22.98 μg/m³
+    Spatial Spillover Received: 1.46 μg/m³ (6.3%)
+
+    Top Contributing Neighbors (with Weather Context):
+    Neighbor                       PM10     BLH      WS     Contrib  Mechanism
+    -------------------------------------------------------------------------------------
+    Monte Gaza                     22.6     339.2    0.72   3.76     Mixed factors
+    Rovereto                       19.7     338.2    0.63   3.28     Mixed factors
+    Parco S. Chiara                19.7     319.9    0.74   3.28     Mixed factors
+    Via Bolzano                    18.5     330.7    0.70   3.08     Mixed factors
+    Laives_1,_c/o_campi_sportivi_z 18.2     409.7    0.65   3.03     Mixed factors
+    A22_sud,_Termeno,_c/o_Maso_Bin 16.9     390.7    0.74   2.82     Mixed factors
+
+[8] Calculating Network Centrality Metrics...
+
+    Top Pollution Exporters (Network Hubs):
+    Station                             PM10       Export Score
+    ---------------------------------------------------------
+    Pavia-p.zza_Minerva_PM10            34.87      34.87       
+    VE_Tagliamento                      34.47      34.47       
+    TV_S_Agnese                         33.47      33.47       
+    Vigevano-via_Valletta_PM10          32.11      32.11       
+    Mantova-p.zza_Gramsci_PM10          31.64      31.64       
+    TV_Lancieri                         31.17      31.17       
+    Parona_PM10                         30.88      30.88       
+    Brescia-Broletto_PM10               30.88      30.88       
+    Mantova-S.Agnese_PM10               30.58      30.58       
+    Bergamo-via_Garibaldi_PM10          30.58      30.58       
+
+[9] Creating Visualizations...
+    ✓ Saved: spillover_decomposition_targets.png
+    ✓ Saved: spillover_intensity_all_stations.png
+    ✓ Saved: spatial_spillover_map.png
+    ✓ Saved: local_vs_spillover_scatter.png
+    ✓ Saved: spillover_source_contributions.png
+
+======================================================================
+SUMMARY: SPILLOVER ANALYSIS RESULTS
+======================================================================
+
+    Spatial Autoregressive Parameter (ρ): 0.0757
+    → 7.6% of pollution variance explained by spatial spillover
+
+    Overall Statistics:
+    - Mean Observed PM10: 24.74 μg/m³
+    - Mean Spillover Effect: 1.82 μg/m³
+    - Mean Spillover %: 7.6%
+    - Max Spillover %: 14.5%
+    - Min Spillover %: 5.7%
+
+    Target Stations Summary:
+
+    📍 Borgo Valsugana:
+       - Observed PM10: 10.12 μg/m³
+       - From Local Sources: 16.05 μg/m³
+       - From Spatial Spillover: 1.46 μg/m³ (14.5%)
+
+    📍 Monte Gaza:
+       - Observed PM10: 22.56 μg/m³
+       - From Local Sources: 14.17 μg/m³
+       - From Spatial Spillover: 1.47 μg/m³ (6.5%)
+
+    📍 Parco S. Chiara:
+       - Observed PM10: 19.66 μg/m³
+       - From Local Sources: 18.77 μg/m³
+       - From Spatial Spillover: 1.40 μg/m³ (7.1%)
+
+    📍 Piana Rotaliana:
+       - Observed PM10: 22.98 μg/m³
+       - From Local Sources: 17.10 μg/m³
+       - From Spatial Spillover: 1.46 μg/m³ (6.3%)
+
+[10] Saving Results...
+    ✓ station_spillover_decomposition.csv
+    ✓ target_stations_spillover.csv
+    ✓ top_external_polluters.csv
+
+======================================================================
+ANALYSIS COMPLETE
+======================================================================
+
+    📁 Text Output: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_durbin_model/durbin_spillover_analysis.txt
+    📊 CSV Results: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_durbin_model
+    🖼️  Visualizations: /Users/ettoremiglioranza/Projects/gar4ds/assets/spatial_durbin_model
+
+
