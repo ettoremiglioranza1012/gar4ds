@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from libpysal.weights import KNN, DistanceBand
 from esda.moran import Moran, Moran_Local
+import geopandas as gpd
+from shapely.geometry import Point
 from splot.esda import plot_moran, moran_scatterplot, lisa_cluster
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
@@ -209,35 +211,24 @@ def create_variable_lisa_map(var_name, var_means, coords, valid_stations,
 def create_variable_comparison_plot(global_df, assets_dir):
     """Create comparison plot of Moran's I across variables"""
     
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
     
-    # Plot 1: Moran's I values
+    # Plot: Moran's I values
     colors = ['red' if p < 0.05 else 'gray' for p in global_df['P_value']]
-    bars = ax1.barh(global_df['Variable'], global_df['Morans_I'], 
+    bars = ax.barh(global_df['Variable'], global_df['Morans_I'], 
                     color=colors, edgecolor='black')
-    ax1.axvline(x=0, color='black', linestyle='-', linewidth=0.8)
-    ax1.set_xlabel("Moran's I", fontsize=12)
-    ax1.set_title("Global Spatial Autocorrelation by Variable\n(Red = Significant p<0.05)",
+    ax.axvline(x=0, color='black', linestyle='-', linewidth=0.8)
+    ax.set_xlabel("Moran's I", fontsize=12)
+    ax.set_title("Global Spatial Autocorrelation by Variable\n(Red = Significant p<0.05)",
                  fontsize=13, fontweight='bold')
-    ax1.grid(axis='x', alpha=0.3)
+    ax.grid(axis='x', alpha=0.3)
     
     # Add value labels
     for i, (var, val, p) in enumerate(zip(global_df['Variable'], 
                                            global_df['Morans_I'],
                                            global_df['P_value'])):
         label = f"{val:.3f}*" if p < 0.05 else f"{val:.3f}"
-        ax1.text(val + 0.01, i, label, va='center', fontsize=9)
-    
-    # Plot 2: Pattern classification
-    pattern_counts = global_df['Pattern'].value_counts()
-    colors_pie = {'Clustered': '#e74c3c', 'Random': '#95a5a6', 'Dispersed': '#3498db'}
-    pie_colors = [colors_pie.get(p, 'gray') for p in pattern_counts.index]
-    
-    ax2.pie(pattern_counts.values, labels=pattern_counts.index,
-           autopct='%1.0f%%', colors=pie_colors, startangle=90,
-           textprops={'fontsize': 11, 'fontweight': 'bold'})
-    ax2.set_title('Spatial Pattern Distribution\n(Across All Variables)',
-                 fontsize=13, fontweight='bold')
+        ax.text(val + 0.01, i, label, va='center', fontsize=9)
     
     plt.tight_layout()
     plot_path = assets_dir / 'optionA_variable_comparison.png'
@@ -348,9 +339,16 @@ def run_multivariate_clustering(spatial_df, valid_stations, coords,
     create_cluster_heatmap(cluster_profiles, cluster_vars, assets_dir)
     print(f"    ✓ Generated: PCA scatter, spatial cluster map, and regime heatmap")
     
+    # Create spatial connectivity map
+    print("\n[C8] Spatial connectivity analysis...")
+    connectivity_stats = create_connectivity_map(results_df, k_neighbors=6, 
+                                                 assets_dir=assets_dir, 
+                                                 results_dir=results_dir)
+    print(f"    ✓ Connectivity visualization complete")
+    
     # Summary
     print("\n" + "="*80)
-    print("[C8] CLUSTER PROFILE SUMMARY - ATMOSPHERIC REGIME DEFINITIONS")
+    print("[C9] CLUSTER PROFILE SUMMARY - ATMOSPHERIC REGIME DEFINITIONS")
     print("="*80)
     print("(Critical for identifying Source vs. Receptor station characteristics)\n")
     print(cluster_profiles.to_string(index=False))
@@ -521,6 +519,153 @@ def create_cluster_heatmap(cluster_profiles, cluster_vars, assets_dir):
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     print(f"    ✓ Cluster heatmap saved")
     plt.close()
+
+
+def create_connectivity_map(results_df, k_neighbors=6, assets_dir=None, results_dir=None):
+    """
+    Create spatial connectivity visualization (spider map) showing KNN connections.
+    Calculates distance statistics and saves connectivity graph.
+    
+    Args:
+        results_df: DataFrame with Station, Longitude, Latitude, and Cluster columns
+        k_neighbors: Number of nearest neighbors for KNN weights (default: 6)
+        assets_dir: Directory to save visualizations
+        results_dir: Directory to save statistics
+    """
+    print(f"\n[D1] Creating spatial connectivity map (KNN k={k_neighbors})...")
+    
+    try:
+        # Import contextily for basemap (optional)
+        import contextily as ctx
+        has_contextily = True
+    except ImportError:
+        has_contextily = False
+        print("    ℹ contextily not available - basemap will be skipped")
+    
+    # Create GeoDataFrame from coordinates
+    print("    → Converting to GeoDataFrame...")
+    geometry = [Point(xy) for xy in zip(results_df['Longitude'], results_df['Latitude'])]
+    gdf = gpd.GeoDataFrame(results_df, geometry=geometry, crs="EPSG:4326")
+    
+    # Reproject to metric CRS for accurate distance calculation (UTM 32N for Alps region)
+    print("    → Reprojecting to UTM 32N (metric CRS)...")
+    gdf = gdf.to_crs(epsg=32632)
+    
+    # Build KNN weights matrix
+    print(f"    → Building KNN weights matrix (k={k_neighbors})...")
+    w = KNN.from_dataframe(gdf, k=k_neighbors)
+    
+    # Calculate distance statistics
+    print("    → Calculating distance statistics...")
+    min_dists = []
+    max_dists = []
+    all_dists = []
+    
+    for idx, neighbors in w.neighbors.items():
+        origin = gdf.iloc[idx].geometry
+        dists = [origin.distance(gdf.iloc[n].geometry) for n in neighbors]
+        min_dists.append(min(dists))
+        max_dists.append(max(dists))
+        all_dists.extend(dists)
+    
+    # Convert to kilometers
+    avg_nearest = sum(min_dists) / len(min_dists) / 1000
+    avg_furthest = sum(max_dists) / len(max_dists) / 1000
+    median_dist = np.median(all_dists) / 1000
+    
+    print(f"    ✓ Average distance to nearest neighbor: {avg_nearest:.2f} km")
+    print(f"    ✓ Average distance to {k_neighbors}th neighbor: {avg_furthest:.2f} km")
+    print(f"    ✓ Median connection distance: {median_dist:.2f} km")
+    
+    # Save statistics to file if results_dir provided
+    if results_dir:
+        stats_df = pd.DataFrame({
+            'Metric': ['Average nearest neighbor distance (km)', 
+                      f'Average {k_neighbors}th neighbor distance (km)', 
+                      'Median connection distance (km)',
+                      'Min connection distance (km)',
+                      'Max connection distance (km)'],
+            'Value': [avg_nearest, avg_furthest, median_dist, 
+                     min(all_dists)/1000, max(all_dists)/1000]
+        })
+        stats_path = results_dir / 'spatial_connectivity_statistics.csv'
+        stats_df.to_csv(stats_path, index=False)
+        print(f"    ✓ Distance statistics saved to: {stats_path.name}")
+    
+    # Create connectivity visualization
+    print("    → Creating connectivity visualization...")
+    fig, ax = plt.subplots(1, 1, figsize=(14, 12))
+    
+    # Plot edges first (so they appear behind points)
+    for i, neighbors in w.neighbors.items():
+        origin = gdf.iloc[i].geometry
+        for n in neighbors:
+            dest = gdf.iloc[n].geometry
+            ax.plot([origin.x, dest.x], [origin.y, dest.y], 
+                   color='gray', linewidth=0.5, alpha=0.5, zorder=1)
+    
+    # Plot points colored by cluster if available
+    if 'Cluster' in gdf.columns:
+        n_clusters = gdf['Cluster'].nunique()
+        colors = plt.cm.tab10(np.linspace(0, 1, n_clusters))
+        
+        for cluster_id in sorted(gdf['Cluster'].unique()):
+            cluster_data = gdf[gdf['Cluster'] == cluster_id]
+            ax.scatter(cluster_data.geometry.x, cluster_data.geometry.y,
+                      c=[colors[cluster_id]], s=100, edgecolor='black',
+                      linewidth=1.5, label=f'Cluster {cluster_id}',
+                      alpha=0.8, zorder=2)
+    else:
+        # Plot all points in red if no cluster information
+        ax.scatter(gdf.geometry.x, gdf.geometry.y,
+                  c='red', s=100, edgecolor='black',
+                  linewidth=1.5, alpha=0.8, zorder=2)
+    
+    # Add basemap if contextily is available
+    if has_contextily:
+        try:
+            print("    → Adding basemap...")
+            ctx.add_basemap(ax, crs=gdf.crs.to_string(), 
+                          source=ctx.providers.CartoDB.Positron,
+                          attribution=False)
+            print("    ✓ Basemap added")
+        except Exception as e:
+            print(f"    ⚠ Could not add basemap: {e}")
+    
+    # Styling
+    ax.set_title(f'Spatial Connectivity Network (KNN k={k_neighbors})\n'
+                f'Avg nearest neighbor: {avg_nearest:.1f} km | '
+                f'Avg bandwidth: {avg_furthest:.1f} km',
+                fontsize=14, fontweight='bold', pad=15)
+    
+    if 'Cluster' in gdf.columns:
+        ax.legend(loc='best', fontsize=9, framealpha=0.9)
+    
+    ax.set_xlabel('Easting (UTM 32N, meters)', fontsize=11)
+    ax.set_ylabel('Northing (UTM 32N, meters)', fontsize=11)
+    ax.ticklabel_format(style='plain', axis='both')
+    
+    # Add grid
+    ax.grid(True, alpha=0.3, linestyle='--', zorder=0)
+    
+    plt.tight_layout()
+    
+    # Save the figure
+    if assets_dir:
+        plot_path = assets_dir / 'spatial_connectivity_graph.png'
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        print(f"    ✓ Connectivity map saved to: {plot_path.name}")
+    
+    plt.close()
+    
+    print("    ✓ Spatial connectivity analysis complete")
+    
+    return {
+        'avg_nearest_km': avg_nearest,
+        'avg_furthest_km': avg_furthest,
+        'median_km': median_dist,
+        'n_connections': len(all_dists)
+    }
 
 
 # ============================================================================

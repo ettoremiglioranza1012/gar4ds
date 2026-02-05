@@ -1,0 +1,64 @@
+1. The "Wind Anomaly": 
+
+Observation: The aggregate correlation of +0.19 is indeed a "mathematical artifact" 
+
+that masks two opposing physical phenomena happening at different heights.
+
+Breaking down your correlation table confirms the "Transport vs. Dispersion" hypothesis:
+
+At the Surface (10m): Dispersion
+
+wind_v_10m (North-South wind): r=−0.226 (Negative).
+
+Physics: In Alpine valleys, North-South winds act as a ventilation system. 
+
+They physically sweep pollution out of the valley. This behaves exactly as expected: More Wind = Less PM10.
+
+At Upper Levels (850hPa, approx. 1500m): Transport & Trapping 
+
+uwind_850 (West-East wind): r=+0.238 (Positive).
+
+Physics: This is the critical finding. Strong Westerly winds aloft are associated with higher surface PM10.
+
+Why? This indicates "Synoptic Forcing." 
+
+Strong upper-level winds might be transporting aged pollution masses over the region, 
+
+or they may be associated with large-scale weather systems (like warm fronts) that cap the valleys, preventing vertical mixing.
+
+Strategic Conclusion: We cannot use a single "Wind Speed" variable. We must include the vertical layers separately in the regression.
+
+Surface Winds will model local cleaning. Upper Winds will model regional transport/trapping.
+
+
+
+
+2. Based on the Exploratory Data Analysis (EDA) log you provided, the terrain distinction ("Mountain/Valley" vs. "Plain") 
+
+is not derived from actual elevation data.
+
+Instead, it is derived using a simplified latitude proxy.
+
+Evidence from the Log
+
+The EDA log explicitly states the methodology in section 2.1 Station Classification by Terrain:
+
+"⚠ No elevation data in metadata. Classifying by latitude as proxy:" "Note: This is a simplified classification" 
+
+How it Works
+
+Since the station metadata (stations_metadata.geojson) lacked an altitude column, the script likely applied a simple geometric rule:
+
+North of a certain latitude: Classified as Mountain/Valley (capturing the Alpine stations in Trentino/South Tyrol like BZ4, BZ5).
+
+South of a certain latitude: Classified as Plain (capturing the Po Valley stations like ARPAL from Lombardy).
+
+Physical Validation
+
+Despite being a rough proxy, the classification appears physically sound based on your results:
+
+Wind Speed: The "Plain" stations show significantly higher median wind speeds 
+
+(~1.0 m/s) compared to "Mountain/Valley" stations (~0.3 m/s). 
+
+This aligns with the physical reality that open plains experience higher winds than enclosed alpine valleys
