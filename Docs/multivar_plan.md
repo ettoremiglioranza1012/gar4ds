@@ -1,5 +1,3 @@
-
-
 # Results and Discussion Section: Structural Plan
 
 **Document Purpose:** Roadmap for drafting "Experimental Evaluation and Results Discussion"  
