@@ -28,7 +28,6 @@ PROJECT_DIR = SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(PROJECT_DIR))
 
 from scripts.interactive_maps.lisa_clusters_map import generate_lisa_map
-from scripts.interactive_maps.pm10_meteorological_map import generate_pm10_map
 from scripts.interactive_maps.seasonal_patterns_map import generate_seasonal_map
 
 
@@ -48,16 +47,6 @@ def main():
     try:
         path = generate_lisa_map()
         output_paths.append(('LISA Clusters Explorer', path))
-    except Exception as e:
-        print(f"    ✗ Error: {e}")
-    
-    # 2. PM10 Meteorological Map
-    print("\n" + "-" * 80)
-    print("  [2/3] PM10 & Meteorological Explorer Map")
-    print("-" * 80)
-    try:
-        path = generate_pm10_map()
-        output_paths.append(('PM10 & Meteorological Explorer', path))
     except Exception as e:
         print(f"    ✗ Error: {e}")
     
