@@ -1,0 +1,139 @@
+# GAR4DS Pipeline Configuration
+# ==============================
+# This file controls the behavior of the entire data processing pipeline.
+# Modify these settings to change temporal aggregation, outputs, and analysis parameters.
+
+# Pipeline Metadata
+pipeline:
+  name: "GAR4DS - PM10 Spatial Analysis Pipeline"
+  version: "1.0.0"
+  description: "Pollution corridors analysis from Po Valley to Alpine Region"
+
+# Temporal Aggregation Settings
+# Options: hourly, daily, weekly, monthly
+temporal:
+  aggregation: "weekly"  # Change to: hourly, daily, weekly, monthly
+  
+  # Aggregation method per variable type
+  aggregation_methods:
+    default: "mean"           # Default for most variables
+    precipitation: "sum"      # Cumulative for precipitation
+    pm10: "mean"              # Mean concentration
+
+  # Resampling rules for pandas (automatically set based on aggregation)
+  # These are for reference - do not modify directly
+  resample_rules:
+    hourly: "h"      # Keep original hourly data (no resample)
+    daily: "D"       # Daily aggregation
+    weekly: "W-MON"  # Weekly, starting Monday
+    monthly: "MS"    # Monthly, start of month
+
+# Data Paths (relative to project root)
+paths:
+  data_dir: "data"
+  results_dir: "results"
+  assets_dir: "assets"
+  weights_dir: "weights"
+  
+  # Source files
+  source:
+    main_dataset: "pm10_era5_land_era5_reanalysis_blh.csv"
+    stations_metadata: "pm10_era5_land_era5_reanalysis_blh_stations_metadata.csv"
+
+# Output file naming
+# The {aggregation} placeholder will be replaced with the temporal setting
+output:
+  # Intermediate files
+  parquet_dataset: "pm10_era5_land_era5_reanalysis_blh.parquet"
+  stations_geojson: "pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson"
+  stations_geojson_elevation: "pm10_era5_land_era5_reanalysis_blh_stations_metadata_with_elevation.geojson"
+  
+  # Panel matrix (includes aggregation in name)
+  panel_matrix: "panel_data_matrix_{aggregation}.parquet"
+  panel_matrix_filtered: "panel_data_matrix_{aggregation}_filtered.parquet"
+  
+  # Spatial weights
+  spatial_weights: "spatial_weights_knn{k}.gal"
+
+# Spatial Analysis Settings
+spatial:
+  # KNN weights
+  knn_neighbors: 6
+  
+  # LISA analysis
+  lisa:
+    permutations: 999
+    significance_level: 0.05
+  
+  # Clustering
+  clustering:
+    n_clusters: 4
+    random_state: 42
+
+# Variable Configuration
+variables:
+  # Target variable
+  target: "pm10"
+  
+  # Variables to keep after multicollinearity filtering
+  keep_after_filtering:
+    - "pm10"
+    - "temperature_2m"
+    - "humidity_950"
+    - "blh"
+    - "solar_radiation_downwards"
+    - "wind_u_10m"
+    - "wind_v_10m"
+    - "uwind_850"
+    - "uwind_950"
+    - "Vwind_850"
+    - "Vwind_950"
+    - "total_precipitation"
+  
+  # Precipitation variables (for sum aggregation and unit conversion)
+  precipitation_vars:
+    - "total_precipitation"
+  
+  # Unit conversions
+  units:
+    precipitation:
+      from: "meters"
+      to: "millimeters"
+      factor: 1000
+
+# Elevation Classification (for terrain analysis)
+elevation:
+  terrain_thresholds:
+    plain_max: 300       # 0-300m = Plain
+    hills_max: 600       # 300-600m = Hills
+    # >600m = Mountain
+  
+  api_url: "https://api.open-elevation.com/api/v1/lookup"
+
+# Visualization Settings
+visualization:
+  # Color palettes
+  palettes:
+    sequential: "viridis"
+    diverging: "RdBu_r"
+    categorical: "Set2"
+  
+  # Figure sizes (width, height in inches)
+  figure_sizes:
+    small: [8, 6]
+    medium: [12, 8]
+    large: [16, 12]
+  
+  # DPI for saved figures
+  dpi: 300
+
+# Logging
+logging:
+  level: "INFO"
+  save_console_output: true
+  timestamp_format: "%Y%m%d_%H%M%S"
+
+# Model Settings (for Spatial Durbin Model)
+model:
+  significance_levels: [0.01, 0.05, 0.10]
+  bootstrap_iterations: 100

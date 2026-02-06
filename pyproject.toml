@@ -1,6 +1,6 @@
 [project]
 name = "gar4ds"
-version = "0.1.0"
+version = "1.0.0"
 description = "Pollution Corridors Analysis - Po Valley to Alpine Region"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -23,4 +23,15 @@ dependencies = [
     "polars>=1.37.1",
     "pyarrow>=23.0.0",
     "contextily>=1.7.0",
+    "pyyaml>=6.0",
+    "requests>=2.31.0",
+    "statsmodels>=0.14.0",
+    "scikit-learn>=1.4.0",
 ]
+
+[project.scripts]
+gar4ds = "gar4ds.run_pipeline:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gar4ds*"]
