@@ -1,141 +1,390 @@
 ================================================================================
-MULTIVARIATE SPATIAL ANALYSIS
+SPATIAL ANALYSIS - PANEL DATA REFACTORED VERSION
 ================================================================================
+Analysis Date: 2026-02-06 11:30:44.835455
 
-[1] Loading data...
-    ✓ Loaded multi-variable dataset: (96432, 253)
+Outputs:
+    Text Log: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_analysis/spatial_analysis_results.txt
+    CSV Results: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_analysis
+    Visualizations: /Users/ettoremiglioranza/Projects/gar4ds/assets/spatial_analysis
+    Weights File: /Users/ettoremiglioranza/Projects/gar4ds/weights
 
-[2] Aligning data and coordinates...
-    ✓ Found 36 valid stations
-    ✓ Available variables: ['BLH', 'PM10', 'PRECIP', 'PRESS', 'RAD', 'TEMP', 'WS']
+[1] LOADING PANEL DATA
+================================================================================
+    Loading: /Users/ettoremiglioranza/Projects/gar4ds/data/panel_data_matrix_filtered_for_collinearity.parquet
+    ✓ Shape: (21275, 12) (observations × variables)
+    ✓ Index: ['week_start', 'station_id']
+    ✓ Columns: ['pm10', 'temperature_2m', 'humidity_950', 'blh', 'solar_radiation_downwards', 'wind_u_10m', 'wind_v_10m', 'uwind_850', 'uwind_950', 'Vwind_850', 'Vwind_950', 'total_precipitation']
+    ✓ MultiIndex confirmed: ['week_start', 'station_id']
+    ✓ Time periods: 575
+    ✓ Stations: 37
 
-[3] Creating spatial weights matrix...
-    ✓ KNN weights created (k=6)
+[2] LOADING STATION METADATA
+================================================================================
+    Loading: /Users/ettoremiglioranza/Projects/gar4ds/data/pm10_era5_land_era5_reanalysis_blh_stations_metadata_with_elevation.geojson
+    ✓ Loaded 37 stations
+    ✓ Columns: ['station_name', 'region', 'Longitude', 'Latitude', 'elevation', 'terrain_type', 'area_type']
+    ✓ Regions: ['Veneto', 'Lombardia', 'Trentino', 'Alto-Adige']
+    ✓ Coordinate range:
+        Longitude: [8.7543, 12.5104]
+        Latitude: [44.9996, 46.7974]
+    ✓ Elevation range: [-5.0, 1596.0] meters
+    ✓ Average elevation: 235.2 meters
+    ✓ Terrain distribution:
+        plain: 31 stations
+        mountain: 3 stations
+        hills: 3 stations
+
+[3] CREATING CROSS-SECTIONAL VIEW
+================================================================================
+    Strategy: Time-aggregate panel data (mean over all weeks)
+    Formula: X̄ᵢ = (1/T) Σₜ Xᵢₜ
+
+    ✓ Aggregation complete
+    ✓ Output shape: (37, 12) (stations × variables)
+    ✓ Stations: ['402201', '402203', '402204', '402206', '402209', '402211', '402212', '402213', '502604', '502608', '502609', '502612', '502701', '502720', 'AB2', 'ARPAL_001', 'ARPAL_002', 'ARPAL_005', 'ARPAL_007', 'ARPAL_008', 'ARPAL_011', 'ARPAL_012', 'ARPAL_017', 'ARPAL_019', 'ARPAL_020', 'ARPAL_022', 'ARPAL_023', 'ARPAL_026', 'ARPAL_027', 'ARPAL_028', 'BR1', 'BX1', 'BZ4', 'BZ5', 'LA1', 'LS1', 'ME1']
+    ✓ Variables: ['pm10', 'temperature_2m', 'humidity_950', 'blh', 'solar_radiation_downwards', 'wind_u_10m', 'wind_v_10m', 'uwind_850', 'uwind_950', 'Vwind_850', 'Vwind_950', 'total_precipitation']
+
+    Summary statistics (cross-sectional means):
+                                    mean           std            min            max
+variable                                                                            
+pm10                           24.565096      6.696320      10.107019      34.913517
+temperature_2m                284.483648      3.177382     276.224672     288.104504
+humidity_950                   67.736532      3.470193      63.695027      75.564782
+blh                           349.167033     35.740398     299.788770     409.038184
+solar_radiation_downwards  563564.539872  13106.733842  543982.406177  597975.837725
+wind_u_10m                     -0.186730      0.320879      -1.287731       0.451317
+wind_v_10m                     -0.264367      0.229765      -0.632480       0.128578
+uwind_850                       0.226845      0.299888      -0.244244       0.738976
+uwind_950                      -0.509805      0.609089      -1.737769       0.472149
+Vwind_850                       0.150139      0.226998      -0.254407       0.659945
+Vwind_950                      -0.059454      0.193160      -0.280407       0.589831
+total_precipitation            24.145177      3.805680      16.029446      31.498919
+
+[4] ALIGNING STATIONS WITH METADATA
+================================================================================
+    Data stations: 37
+    Metadata stations: 37
+    Valid stations (intersection): 37
+
+    ✓ Aligned dataset shape: (37, 12)
+    ✓ Valid stations: ['402201', '402203', '402204', '402206', '402209', '402211', '402212', '402213', '502604', '502608', '502609', '502612', '502701', '502720', 'AB2', 'ARPAL_001', 'ARPAL_002', 'ARPAL_005', 'ARPAL_007', 'ARPAL_008', 'ARPAL_011', 'ARPAL_012', 'ARPAL_017', 'ARPAL_019', 'ARPAL_020', 'ARPAL_022', 'ARPAL_023', 'ARPAL_026', 'ARPAL_027', 'ARPAL_028', 'BR1', 'BX1', 'BZ4', 'BZ5', 'LA1', 'LS1', 'ME1']
+
+[5] BUILDING SPATIAL WEIGHTS MATRIX
+================================================================================
+    Method: K-Nearest Neighbors (KNN)
+    K: 6 neighbors
+    Justification: KNN ensures logical connectivity in Alpine terrain
+                   (avoids linking valleys across mountains)
+
+    ✓ Weights matrix created
+    ✓ Number of observations: 37
+    ✓ Average neighbors: 6.00
+    ✓ Transformation: Row-standardized
+
+    Connection distance statistics:
+        Mean: 0.3449°
+        Median: 0.3133°
+        Min: 0.0133°
+        Max: 1.0782°
+
+    Approximate distance in km (1° ≈ 111 km):
+        Mean: 38.28 km
+        Median: 34.77 km
+        Max: 119.68 km
+
+[6] SAVING SPATIAL WEIGHTS (.GAL FORMAT)
+================================================================================
+    Output: /Users/ettoremiglioranza/Projects/gar4ds/weights/spatial_weights_knn6.gal
+    Purpose: Input for Spatial Durbin Model regression
+    ✓ GAL file saved successfully
+    ✓ Format: Station_ID followed by neighbor Station_IDs
+    ✓ Total connections: 222
+
+[7] CALCULATING GLOBAL MORAN'S I
+================================================================================
+    Purpose: Test spatial autocorrelation (justify spatial lag term ρWy)
+    Null hypothesis: Values are randomly distributed in space
+    Interpretation: I > 0 → Clustering, I < 0 → Dispersion, I ≈ 0 → Random
+
+    --- pm10 ---
+        Moran's I: 0.6813
+        P-value: 0.0010
+        Z-score: 9.0112
+        Pattern: Clustered **
+
+    --- temperature_2m ---
+        Moran's I: 0.5503
+        P-value: 0.0010
+        Z-score: 7.1474
+        Pattern: Clustered **
+
+    --- humidity_950 ---
+        Moran's I: 0.3240
+        P-value: 0.0010
+        Z-score: 4.4589
+        Pattern: Clustered **
+
+    --- blh ---
+        Moran's I: 0.4856
+        P-value: 0.0010
+        Z-score: 6.5017
+        Pattern: Clustered **
+
+    --- solar_radiation_downwards ---
+        Moran's I: 0.3067
+        P-value: 0.0010
+        Z-score: 4.4053
+        Pattern: Clustered **
+
+    --- wind_u_10m ---
+        Moran's I: 0.5073
+        P-value: 0.0010
+        Z-score: 7.5799
+        Pattern: Clustered **
+
+    --- wind_v_10m ---
+        Moran's I: 0.6726
+        P-value: 0.0010
+        Z-score: 8.3684
+        Pattern: Clustered **
+
+    --- uwind_850 ---
+        Moran's I: 0.6067
+        P-value: 0.0010
+        Z-score: 8.1363
+        Pattern: Clustered **
+
+    --- uwind_950 ---
+        Moran's I: 0.6895
+        P-value: 0.0010
+        Z-score: 8.8941
+        Pattern: Clustered **
+
+    --- Vwind_850 ---
+        Moran's I: 0.4241
+        P-value: 0.0010
+        Z-score: 5.5373
+        Pattern: Clustered **
+
+    --- Vwind_950 ---
+        Moran's I: 0.3215
+        P-value: 0.0010
+        Z-score: 4.3507
+        Pattern: Clustered **
+
+    --- total_precipitation ---
+        Moran's I: 0.3018
+        P-value: 0.0010
+        Z-score: 4.1681
+        Pattern: Clustered **
 
 ================================================================================
-OPTION A: PARALLEL SPATIAL ANALYSIS FOR EACH VARIABLE
+GLOBAL MORAN'S I SUMMARY
 ================================================================================
+                 Variable  Morans_I  Expected_I  Variance_I  Z_score  P_value Significant   Pattern
+                     pm10  0.681338   -0.027778    0.006185 9.011223    0.001         Yes Clustered
+           temperature_2m  0.550323   -0.027778    0.006533 7.147391    0.001         Yes Clustered
+             humidity_950  0.324012   -0.027778    0.006261 4.458892    0.001         Yes Clustered
+                      blh  0.485592   -0.027778    0.006234 6.501710    0.001         Yes Clustered
+solar_radiation_downwards  0.306657   -0.027778    0.005808 4.405332    0.001         Yes Clustered
+               wind_u_10m  0.507317   -0.027778    0.004979 7.579898    0.001         Yes Clustered
+               wind_v_10m  0.672601   -0.027778    0.006972 8.368351    0.001         Yes Clustered
+                uwind_850  0.606739   -0.027778    0.006097 8.136324    0.001         Yes Clustered
+                uwind_950  0.689518   -0.027778    0.006602 8.894096    0.001         Yes Clustered
+                Vwind_850  0.424080   -0.027778    0.006698 5.537291    0.001         Yes Clustered
+                Vwind_950  0.321550   -0.027778    0.006337 4.350746    0.001         Yes Clustered
+      total_precipitation  0.301814   -0.027778    0.006219 4.168128    0.001         Yes Clustered
 
-[A1] Running LISA for each variable...
-    ✓ Analyzing: ['PM10', 'TEMP', 'BLH', 'WS', 'PRECIP', 'PRESS', 'RAD']
+[8] CALCULATING LOCAL MORAN'S I (LISA)
+================================================================================
+    Purpose: Identify spatial clusters and outliers
+    Cluster types:
+        High-High: High values surrounded by high values (hotspots)
+        Low-Low: Low values surrounded by low values (coldspots)
+        High-Low: High values surrounded by low values (spatial outliers)
+        Low-High: Low values surrounded by high values (spatial outliers)
 
-    --- Analyzing PM10 ---
-        Global Moran's I: 0.6012 (p=0.0010)
-        High-High: 6, Low-Low: 15
-        High-Low: 0, Low-High: 1
-        ✓ Saved map: optionA_lisa_map_PM10.png
-        ✓ LISA cluster map generated for PM10
+    --- pm10 ---
+        High-High (hotspots): 8
+        Low-Low (coldspots): 16
+        High-Low (outliers): 0
+        Low-High (outliers): 2
+        Not significant: 11
 
-    --- Analyzing TEMP ---
-        Global Moran's I: 0.5283 (p=0.0010)
-        High-High: 5, Low-Low: 8
-        High-Low: 0, Low-High: 0
-        → Meteorological variable - map generation skipped (statistical validation only)
+    --- temperature_2m ---
+        High-High (hotspots): 5
+        Low-Low (coldspots): 8
+        High-Low (outliers): 0
+        Low-High (outliers): 0
+        Not significant: 24
 
-    --- Analyzing BLH ---
-        Global Moran's I: 0.4666 (p=0.0010)
-        High-High: 5, Low-Low: 10
-        High-Low: 0, Low-High: 1
-        → Meteorological variable - map generation skipped (statistical validation only)
+    --- humidity_950 ---
+        High-High (hotspots): 6
+        Low-Low (coldspots): 5
+        High-Low (outliers): 2
+        Low-High (outliers): 1
+        Not significant: 23
 
-    --- Analyzing WS ---
-        Global Moran's I: 0.6792 (p=0.0010)
-        High-High: 9, Low-Low: 15
-        High-Low: 0, Low-High: 1
-        → Meteorological variable - map generation skipped (statistical validation only)
+    --- blh ---
+        High-High (hotspots): 7
+        Low-Low (coldspots): 9
+        High-Low (outliers): 0
+        Low-High (outliers): 1
+        Not significant: 20
 
-    --- Analyzing PRECIP ---
-        Global Moran's I: 0.2941 (p=0.0020)
-        High-High: 6, Low-Low: 3
-        High-Low: 0, Low-High: 0
-        → Meteorological variable - map generation skipped (statistical validation only)
+    --- solar_radiation_downwards ---
+        High-High (hotspots): 3
+        Low-Low (coldspots): 8
+        High-Low (outliers): 0
+        Low-High (outliers): 0
+        Not significant: 26
 
-    --- Analyzing PRESS ---
-        Global Moran's I: 0.6565 (p=0.0010)
-        High-High: 12, Low-Low: 14
-        High-Low: 0, Low-High: 0
-        → Meteorological variable - map generation skipped (statistical validation only)
+    --- wind_u_10m ---
+        High-High (hotspots): 9
+        Low-Low (coldspots): 5
+        High-Low (outliers): 1
+        Low-High (outliers): 0
+        Not significant: 22
 
-    --- Analyzing RAD ---
-        Global Moran's I: 0.3189 (p=0.0020)
-        High-High: 3, Low-Low: 8
-        High-Low: 0, Low-High: 0
-        → Meteorological variable - map generation skipped (statistical validation only)
+    --- wind_v_10m ---
+        High-High (hotspots): 13
+        Low-Low (coldspots): 12
+        High-Low (outliers): 1
+        Low-High (outliers): 1
+        Not significant: 10
 
-[A2] Saving results...
-    ✓ Global Moran's I results saved (all variables for statistical validation)
-    ✓ Detailed LISA results saved (all variables)
-    ✓ Comparison plot saved: optionA_variable_comparison.png
+    --- uwind_850 ---
+        High-High (hotspots): 8
+        Low-Low (coldspots): 12
+        High-Low (outliers): 1
+        Low-High (outliers): 0
+        Not significant: 16
 
-    📊 Visual outputs: 1 LISA cluster map(s) generated (PM10 only)
-    📋 Meteorological variables: Statistical validation recorded, maps skipped
+    --- uwind_950 ---
+        High-High (hotspots): 16
+        Low-Low (coldspots): 6
+        High-Low (outliers): 0
+        Low-High (outliers): 0
+        Not significant: 15
 
-[A3] Summary of spatial patterns (all variables):
-Variable  Morans_I  P_value Significant   Pattern
-    PM10  0.601193    0.001         Yes Clustered
-    TEMP  0.528311    0.001         Yes Clustered
-     BLH  0.466606    0.001         Yes Clustered
-      WS  0.679211    0.001         Yes Clustered
-  PRECIP  0.294097    0.002         Yes Clustered
-   PRESS  0.656503    0.001         Yes Clustered
-     RAD  0.318917    0.002         Yes Clustered
+    --- Vwind_850 ---
+        High-High (hotspots): 6
+        Low-Low (coldspots): 7
+        High-Low (outliers): 0
+        Low-High (outliers): 1
+        Not significant: 23
+
+    --- Vwind_950 ---
+        High-High (hotspots): 5
+        Low-Low (coldspots): 4
+        High-Low (outliers): 0
+        Low-High (outliers): 1
+        Not significant: 27
+
+    --- total_precipitation ---
+        High-High (hotspots): 6
+        Low-Low (coldspots): 3
+        High-Low (outliers): 0
+        Low-High (outliers): 0
+        Not significant: 28
+
+    ✓ LISA analysis complete for all variables
+
+[9] CREATING LISA CLUSTER MAPS
+================================================================================
+    Focus: PM10 (primary pollutant)
+    ✓ LISA cluster map saved: lisa_cluster_map_pm10.png
+
+[10] CREATING MORAN'S I COMPARISON PLOT
+================================================================================
+    ✓ Comparison plot saved: global_morans_i_comparison.png
+
+[11] MULTIVARIATE CLUSTERING ANALYSIS
+================================================================================
+    Purpose: Detect atmospheric regimes (mountain vs plain)
+    Method: K-Means clustering on standardized meteorological profiles
+    Output: Cluster IDs → Dummy variables for regression
+
+    Clustering variables: ['temperature_2m', 'humidity_950', 'blh', 'solar_radiation_downwards', 'wind_u_10m', 'wind_v_10m', 'uwind_850', 'uwind_950', 'Vwind_850', 'Vwind_950', 'total_precipitation']
+    Feature matrix shape: (37, 11) (stations × variables)
+
+    Standardizing features...
+    ✓ Features standardized (mean=0, std=1)
+
+    Determining optimal number of clusters...
+    ✓ Optimal K: 5
+
+    Performing K-Means clustering (k=5)...
+
+    Cluster distribution:
+        Cluster 0: 5 stations
+        Cluster 1: 6 stations
+        Cluster 2: 11 stations
+        Cluster 3: 8 stations
+        Cluster 4: 7 stations
+
+    Performing PCA for 2D visualization...
+    ✓ PC1 explains 41.8% variance
+    ✓ PC2 explains 25.0% variance
+    ✓ Total explained: 66.8%
+
+    Calculating cluster profiles...
 
 ================================================================================
-OPTION C: MULTIVARIATE CLUSTERING ANALYSIS
+CLUSTER PROFILES - ATMOSPHERIC REGIMES
 ================================================================================
+ Cluster  N_Stations  temperature_2m_mean  temperature_2m_std  humidity_950_mean  humidity_950_std   blh_mean   blh_std  solar_radiation_downwards_mean  solar_radiation_downwards_std  wind_u_10m_mean  wind_u_10m_std  wind_v_10m_mean  wind_v_10m_std  uwind_850_mean  uwind_850_std  uwind_950_mean  uwind_950_std  Vwind_850_mean  Vwind_850_std  Vwind_950_mean  Vwind_950_std  total_precipitation_mean  total_precipitation_std  pm10_mean  pm10_std
+       0           5           287.375119            0.564027          65.690391          0.227956 316.818266  9.434257                   565145.543774                    8076.757085        -0.833716        0.339190        -0.599856        0.025324        0.660840       0.078692       -1.554960       0.159428        0.171029       0.043272       -0.185159       0.064587                 23.396441                 1.313330  31.443761  2.775105
+       1           6           281.352343            2.513434          68.762641          4.403677 400.143981 10.079566                   560334.088698                    3982.397915        -0.085898        0.051547        -0.120183        0.136515       -0.127462       0.042010       -0.103441       0.056531       -0.100360       0.119134       -0.166987       0.079445                 21.357719                 0.428844  16.856078  1.729278
+       2          11           281.829716            2.615204          71.229772          2.435810 330.620352 16.388463                   556791.433546                   16650.376918         0.061884        0.168611        -0.110611        0.169589        0.200537       0.161348        0.066788       0.209587        0.004095       0.112811       -0.104354       0.093838                 28.779409                 1.703746  18.811221  3.676122
+       3           8           286.060405            0.465611          65.883337          2.089987 322.606262 12.945637                   560165.102005                    7431.825655        -0.135914        0.035719        -0.433782        0.113163        0.354914       0.154626       -0.535152       0.344615        0.258092       0.168871       -0.019387       0.149880                 24.280819                 1.555554  28.431908  2.348284
+       4           7           287.470744            0.190895          64.947102          0.709582 388.078721  8.287235                   579732.734166                    5523.350069        -0.259781        0.089544        -0.196318        0.190588        0.115520       0.377660       -0.988684       0.203058        0.456052       0.121152        0.147270       0.307434                 19.631854                 2.556464  30.882083  2.532733
 
-[C1] Preparing multivariate feature matrix...
-    (This analysis defines atmospheric regimes for source/receptor classification)
-    ✓ Using variables: ['PM10', 'TEMP', 'BLH', 'WS', 'PRECIP', 'PRESS']
-    ✓ Feature matrix shape: (36, 6) (stations × variables)
-
-[C2] Standardizing features...
-    ✓ Features standardized
-
-[C3] Performing K-means clustering...
-    ✓ Optimal number of clusters: 4
-
-    Cluster sizes:
-      Cluster 0: 13 stations
-      Cluster 1: 10 stations
-      Cluster 2: 6 stations
-      Cluster 3: 7 stations
-
-[C4] Performing PCA for visualization...
-    ✓ Explained variance: PC1=63.67%, PC2=26.37%
-
-[C5] Analyzing cluster profiles...
-    (Defining atmospheric regimes for source/receptor classification)
-
-[C6] Saving results...
-    ✓ Cluster assignments saved (station-to-regime mapping)
-    ✓ Cluster profiles saved (regime environmental characteristics)
-
-[C7] Creating visualizations...
+[12] CREATING CLUSTERING VISUALIZATIONS
+================================================================================
+    Creating PCA scatter plot...
     ✓ PCA scatter saved
+    Creating spatial cluster map...
     ✓ Spatial cluster map saved
+    Creating cluster profile heatmap...
     ✓ Cluster heatmap saved
-    ✓ Generated: PCA scatter, spatial cluster map, and regime heatmap
+    ✓ All clustering visualizations complete
+
+[13] CREATING CONNECTIVITY VISUALIZATION
+================================================================================
+    Drawing connections...
+    Drawing stations...
+    ✓ Connectivity network saved: spatial_connectivity_network.png
 
 ================================================================================
-[C8] CLUSTER PROFILE SUMMARY - ATMOSPHERIC REGIME DEFINITIONS
+SAVING RESULTS
 ================================================================================
-(Critical for identifying Source vs. Receptor station characteristics)
-
- Cluster  N_Stations  PM10_mean  PM10_std  TEMP_mean  TEMP_std   BLH_mean   BLH_std  WS_mean   WS_std  PRECIP_mean  PRECIP_std    PRESS_mean   PRESS_std Characterization
-       0          13  29.557617  2.830342 286.584503  0.822427 320.857894 11.678782 1.578924 0.397490     0.000143    0.000009  99498.163466 1665.994180   High Pollution
-       1          10  18.949997  3.830323 281.821429  2.756602 328.613442 14.882939 0.804956 0.204406     0.000173    0.000010  89685.772340 3989.793024    Low Pollution
-       2           6  16.841273  1.723562 281.368835  2.512197 400.778492 10.076494 0.716574 0.096738     0.000127    0.000003  88846.139921 3078.160349    Low Pollution
-       3           7  30.838288  2.527173 287.490197  0.191307 388.647683  8.296313 1.678956 0.076157     0.000117    0.000015 100379.767556  437.390261   High Pollution
-
-================================================================================
+    ✓ Station profiles: station_profiles_cross_sectional.csv
+    ✓ Global Moran's I: optionA_global_morans_I_by_variable.csv
+    ✓ LISA results: optionA_lisa_results_all_variables.csv
+    ✓ Cluster assignments: optionC_multivariate_clusters.csv
+    ✓ Cluster profiles: optionC_cluster_profiles.csv
 
 ================================================================================
 ANALYSIS COMPLETE
 ================================================================================
 
-    📁 Text Output: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_analysis/spatial_analysis_results.txt
-    📊 CSV Results: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_analysis
-    🖼️  Visualizations: /Users/ettoremiglioranza/Projects/gar4ds/assets/spatial_analysis
+📊 KEY FINDINGS:
+    • Stations analyzed: 37
+    • Variables analyzed: 12
+    • Spatial connections: 222
 
+    • Variables with significant spatial autocorrelation: 12
+        ['pm10', 'temperature_2m', 'humidity_950', 'blh', 'solar_radiation_downwards', 'wind_u_10m', 'wind_v_10m', 'uwind_850', 'uwind_950', 'Vwind_850', 'Vwind_950', 'total_precipitation']
 
+    • PM10 hotspots identified: 8
+        ['502609', '502701', 'ARPAL_002', 'ARPAL_005', 'ARPAL_007', 'ARPAL_020', 'ARPAL_022', 'ARPAL_028']
+
+    • Atmospheric regimes (clusters): 5
+
+✅ CRITICAL OUTPUT FOR REGRESSION:
+    → Spatial weights file: /Users/ettoremiglioranza/Projects/gar4ds/weights/spatial_weights_knn6.gal
+    → Use this .gal file in your Spatial Durbin Model
+
+================================================================================

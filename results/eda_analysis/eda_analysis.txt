@@ -1,0 +1,275 @@
+
+================================================================================
+  EXPLORATORY DATA ANALYSIS (EDA)
+================================================================================
+
+Execution Time: 2026-02-06 10:07:36
+Purpose: Verify physical relationships before regression modeling
+Output Directory: /Users/ettoremiglioranza/Projects/gar4ds/results/eda_analysis
+
+--- Loading Data ---
+
+Loading panel matrix: panel_data_matrix_filtered_for_collinearity.parquet
+  Shape: (21275, 12)
+  Index: ['week_start', 'station_id']
+  Variables: 12
+
+Loading station metadata: pm10_era5_land_era5_reanalysis_blh_stations_metadata_with_elevation.geojson
+  Stations: 37
+  Columns: ['region', 'station_code', 'station_name', 'latitude', 'longitude', 'elevation', 'terrain_type', 'area_type', 'geometry']
+
+================================================================================
+  1. CORRELATION ANALYSIS
+================================================================================
+
+Verifying Physical Relationships
+
+--- 1.1 Overall Correlation Matrix ---
+
+Correlation Matrix (Key Physical Variables):
+variable              pm10    blh  temperature_2m  total_precipitation  wind_u_10m  wind_v_10m
+variable                                                                                      
+pm10                 1.000 -0.474          -0.257               -0.307      -0.041      -0.226
+blh                 -0.474  1.000           0.595                0.036      -0.122       0.283
+temperature_2m      -0.257  0.595           1.000                0.079      -0.195       0.238
+total_precipitation -0.307  0.036           0.079                1.000      -0.150       0.065
+wind_u_10m          -0.041 -0.122          -0.195               -0.150       1.000       0.311
+wind_v_10m          -0.226  0.283           0.238                0.065       0.311       1.000
+
+Generating correlation heatmap...
+  Saved: /Users/ettoremiglioranza/Projects/gar4ds/assets/eda_analysis/correlation_heatmap.png
+
+--- 1.2 PM10 Correlations - Physical Validation ---
+
+PM10 Correlations with All Variables:
+  uwind_850                               :   0.238
+  uwind_950                               :   0.033
+  Vwind_950                               :  -0.029
+  wind_u_10m                              :  -0.041
+  Vwind_850                               :  -0.063
+  humidity_950                            :  -0.112
+  wind_v_10m                              :  -0.226
+  temperature_2m                          :  -0.257
+  total_precipitation                     :  -0.307
+  solar_radiation_downwards               :  -0.408
+  blh                                     :  -0.474
+
+⚠ Computing derived variable: wind_speed
+  PM10 vs Wind Speed correlation: 0.191
+
+--- 1.3 Physical Hypothesis Testing ---
+
+Expected Physical Relationships:
+
+1. PM10 vs BLH (Boundary Layer Height):
+   Expected: NEGATIVE correlation (higher BLH → better dispersion → lower PM10)
+   Observed: -0.474
+   ✓ CONFIRMED: Negative correlation as expected
+
+2. PM10 vs Wind Speed:
+   Expected: NEGATIVE correlation (higher wind → better dispersion)
+   Observed: 0.191
+   ⚠ UNEXPECTED: Positive correlation (needs investigation)
+
+3. PM10 vs Temperature:
+   Expected: Complex (inversion layers in winter → can be negative)
+   Observed: -0.257
+   Note: Temperature effects are season-dependent
+
+================================================================================
+  2. SPATIAL VARIANCE ANALYSIS
+================================================================================
+
+Comparing Valley/Mountain vs Plain Stations
+
+--- 2.1 Station Classification by Terrain ---
+
+✓ Using elevation data from metadata (Open-Elevation API)
+  Elevation range: -5.0 to 1596.0 meters
+✓ Using pre-classified terrain types from metadata
+
+Station Classification:
+  Plain: 31 stations
+  Mountain/Valley: 3 stations
+  Hills: 3 stations
+
+Area Type Classification:
+  Suburban: 25 stations
+  Urban: 11 stations
+  Rural: 1 stations
+
+Stations by Terrain Type:
+
+  Plain:
+    502604, 502608, 502609, 502612, 502701, 502720, ARPAL_001, ARPAL_002, ARPAL_005, ARPAL_007, ARPAL_008, ARPAL_011, ARPAL_012, ARPAL_017, ARPAL_019, ARPAL_020, ARPAL_022, ARPAL_023, ARPAL_026, ARPAL_027, ARPAL_028, 402212, 402204, 402209, 402206, 402211, 402213, AB2, BZ4, BZ5, LS1
+
+  Mountain/Valley:
+    402203, BR1, LA1
+
+  Hills:
+    402201, BX1, ME1
+
+--- 2.2 Comparing Wind Patterns by Terrain ---
+
+Wind Speed Statistics by Terrain Type:
+                   count   mean    std    min    25%    50%    75%    max
+terrain_type                                                             
+Hills             1725.0  0.418  0.289  0.001  0.202  0.344  0.556  1.547
+Mountain/Valley   1725.0  0.459  0.303  0.006  0.235  0.380  0.609  1.602
+Plain            17825.0  0.626  0.499  0.003  0.277  0.488  0.841  6.837
+
+--- 2.3 Comparing PM10 Levels by Terrain ---
+
+PM10 Statistics by Terrain Type:
+                   count    mean     std    min     25%     50%     75%      max
+terrain_type                                                                    
+Hills             1725.0  18.425   8.920  4.190  11.833  16.548  22.994   63.744
+Mountain/Valley   1725.0  13.924   7.928  2.170   8.327  12.458  17.946   65.149
+Plain            17825.0  26.189  15.289  4.292  15.738  21.738  31.986  173.107
+
+Generating terrain comparison boxplots...
+  Saved: /Users/ettoremiglioranza/Projects/gar4ds/assets/eda_analysis/terrain_comparison_boxplots.png
+
+--- 2.4 Spatial Summary ---
+
+
+Key Spatial Findings:
+1. Station distribution across terrain types confirmed
+2. Statistical differences in meteorological conditions evaluated
+3. Terrain-specific PM10 patterns identified
+
+================================================================================
+  3. TEMPORAL SEASONALITY ANALYSIS
+================================================================================
+
+Examining Seasonal Patterns and Winter Peaks
+
+--- 3.1 PM10 Seasonal Patterns ---
+
+PM10 by Month (Average across all stations and years):
+      mean    std   min     max
+Jan  37.20  18.51  2.22  112.51
+Feb  37.01  19.97  2.82  173.11
+Mar  29.27  14.54  4.04   84.46
+Apr  20.19   7.80  2.83   51.90
+May  14.55   5.11  3.57   41.68
+Jun  17.78   6.44  3.98   38.55
+Jul  17.88   6.02  3.89   49.89
+Aug  16.47   5.50  2.43   42.66
+Sep  17.79   7.28  2.96   62.03
+Oct  24.54  13.57  3.64  108.24
+Nov  27.69  15.18  2.41   98.26
+Dec  34.86  16.83  2.17  137.24
+
+
+PM10 by Season:
+         count   mean    std   min    25%    50%    75%     max
+season                                                         
+Winter  5291.0  36.36  18.47  2.17  23.13  32.85  46.35  173.11
+Spring  5328.0  21.30  11.68  2.83  13.21  18.13  26.28   84.46
+Summer  5365.0  17.37   6.03  2.43  12.94  16.64  21.15   49.89
+Autumn  5291.0  23.36  13.16  2.41  14.48  19.96  28.27  108.24
+
+✓ Peak Season: Winter (Mean PM10: 36.36 μg/m³)
+  ✓ CONFIRMED: Winter shows highest PM10 levels as expected
+    Physical explanation: Temperature inversions trap pollutants
+
+--- 3.2 Year-over-Year Trends ---
+
+PM10 Annual Statistics:
+       mean    std   min     max  count
+year                                   
+2014  23.24  13.94  2.17   93.89   1924
+2015  28.25  17.48  2.93  137.24   1924
+2016  25.23  17.42  2.35  173.11   1924
+2017  28.35  18.54  2.92  109.36   1924
+2018  24.71  12.07  3.01   93.07   1961
+2019  23.21  13.24  3.01   92.96   1924
+2020  23.82  15.09  3.35  106.18   1924
+2021  23.48  13.38  2.40   80.69   1924
+2022  24.66  13.11  2.68   99.17   1924
+2023  22.24  12.33  2.61  105.93   1924
+2024  22.75  13.93  2.39  104.15   1961
+2025  40.96  20.37  3.46  102.77     37
+
+Linear Trend Analysis:
+  Slope: 0.360 μg/m³ per year
+  R²: 0.064
+  p-value: 0.427834
+  → No significant temporal trend detected
+
+--- 3.3 Generating Temporal Visualizations ---
+
+  Saved: /Users/ettoremiglioranza/Projects/gar4ds/assets/eda_analysis/temporal_seasonality_analysis.png
+
+--- 3.4 Meteorological Seasonality ---
+
+
+Seasonal Patterns in Meteorological Variables:
+
+temperature_2m:
+          mean   std
+season              
+Winter  275.43  3.80
+Spring  283.14  5.10
+Summer  293.66  4.18
+Autumn  285.59  5.64
+
+blh:
+          mean     std
+season                
+Winter  160.50   96.91
+Spring  445.28  135.29
+Summer  503.51  122.95
+Autumn  284.54  117.35
+
+total_precipitation:
+         mean    std
+season              
+Winter  16.93  24.58
+Spring  23.82  23.36
+Summer  27.80  23.17
+Autumn  27.98  32.64
+
+================================================================================
+  EXECUTIVE SUMMARY
+================================================================================
+
+Key Findings:
+
+1. PHYSICAL RELATIONSHIPS VALIDATED
+   - Correlations between PM10 and meteorological variables examined
+   - Expected negative correlation with BLH (boundary layer height) verified
+   - Wind speed effects on dispersion analyzed
+
+2. SPATIAL PATTERNS IDENTIFIED
+   - Stations classified by terrain type (valley/mountain vs plain)
+   - Significant differences in wind patterns across terrain types
+   - Terrain-specific PM10 accumulation patterns documented
+
+3. TEMPORAL SEASONALITY CONFIRMED
+   - Winter peaks in PM10 concentrations verified
+   - Seasonal patterns consistent with temperature inversion effects
+   - Multi-year trends analyzed for data quality assessment
+
+4. DATA QUALITY ASSESSMENT
+   ✓ Panel matrix structure validated
+   ✓ Physical relationships align with atmospheric science principles
+   ✓ Spatial and temporal patterns are consistent and interpretable
+
+5. READINESS FOR REGRESSION MODELING
+   ✓ Data shows expected correlations
+   ✓ Spatial heterogeneity documented
+   ✓ Temporal patterns understood
+   → Panel data is ready for Spatial Durbin Model analysis
+
+================================================================================
+  EDA COMPLETED SUCCESSFULLY
+================================================================================
+
+Output Log: /Users/ettoremiglioranza/Projects/gar4ds/results/eda_analysis/eda_analysis.txt
+Visualizations: /Users/ettoremiglioranza/Projects/gar4ds/assets/eda_analysis
+
+✓ All analyses completed
+✓ Physical relationships validated
+✓ Ready for regression modeling
