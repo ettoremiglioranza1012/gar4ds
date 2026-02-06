@@ -33,8 +33,8 @@ RESULTS_DIR = BASE_DIR / "results" / "eda_analysis"
 ASSETS_DIR = BASE_DIR / "assets" / "eda_analysis"
 
 # File paths
-PANEL_MATRIX = DATA_DIR / "panel_data_matrix.parquet"
-METADATA_GEOJSON = DATA_DIR / "pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson"
+PANEL_MATRIX = DATA_DIR / "panel_data_matrix_filtered_for_collinearity.parquet"
+METADATA_GEOJSON = DATA_DIR / "pm10_era5_land_era5_reanalysis_blh_stations_metadata_with_elevation.geojson"
 
 # Output files
 OUTPUT_LOG = RESULTS_DIR / "eda_analysis.txt"
@@ -180,33 +180,58 @@ def classify_stations_by_terrain(gdf_metadata):
     """Classify stations by terrain type based on elevation"""
     print_subsection("2.1 Station Classification by Terrain")
     
-    # Check if elevation data is available
-    if 'elevation' not in gdf_metadata.columns:
-        # Calculate from latitude (simple proxy - higher latitude often means mountains in this region)
-        # Or use altitude if available
-        print("⚠ No elevation data in metadata. Classifying by latitude as proxy:")
-        print("  Note: This is a simplified classification")
+    # Check if elevation and terrain_type are already in metadata
+    if 'elevation' in gdf_metadata.columns and 'terrain_type' in gdf_metadata.columns:
+        print("✓ Using elevation data from metadata (Open-Elevation API)")
+        print(f"  Elevation range: {gdf_metadata['elevation'].min():.1f} to {gdf_metadata['elevation'].max():.1f} meters")
         
-        # In Northern Italy, higher latitudes in this dataset often correspond to mountain/valley areas
-        elevation_threshold = gdf_metadata['latitude'].median()
-        gdf_metadata['terrain_type'] = gdf_metadata['latitude'].apply(
+        # If terrain_type exists, use it; otherwise classify based on elevation
+        if gdf_metadata['terrain_type'].notna().all():
+            print("✓ Using pre-classified terrain types from metadata")
+            # Map terrain types to a simplified version for analysis
+            terrain_map = {
+                'plain': 'Plain',
+                'hills': 'Hills',
+                'mountain': 'Mountain/Valley',
+                'unknown': 'Unknown'
+            }
+            gdf_metadata['analysis_terrain'] = gdf_metadata['terrain_type'].map(terrain_map)
+        else:
+            print("⚠ Creating terrain classification from elevation data")
+            elevation_threshold = 500  # meters
+            gdf_metadata['analysis_terrain'] = gdf_metadata['elevation'].apply(
+                lambda x: 'Mountain/Valley' if x > elevation_threshold else 'Plain'
+            )
+    elif 'elevation' in gdf_metadata.columns:
+        print("✓ Using elevation data from metadata")
+        elevation_threshold = 500  # meters
+        gdf_metadata['analysis_terrain'] = gdf_metadata['elevation'].apply(
             lambda x: 'Mountain/Valley' if x > elevation_threshold else 'Plain'
         )
     else:
-        # Use actual elevation if available
-        elevation_threshold = 500  # meters
-        gdf_metadata['terrain_type'] = gdf_metadata['elevation'].apply(
+        # Fallback to latitude proxy
+        print("⚠ No elevation data in metadata. Classifying by latitude as proxy:")
+        print("  Note: This is a simplified classification")
+        elevation_threshold = gdf_metadata['latitude'].median()
+        gdf_metadata['analysis_terrain'] = gdf_metadata['latitude'].apply(
             lambda x: 'Mountain/Valley' if x > elevation_threshold else 'Plain'
         )
     
     print("\nStation Classification:")
-    terrain_counts = gdf_metadata['terrain_type'].value_counts()
+    terrain_counts = gdf_metadata['analysis_terrain'].value_counts()
     for terrain, count in terrain_counts.items():
         print(f"  {terrain}: {count} stations")
     
+    # If we have area_type, also display that
+    if 'area_type' in gdf_metadata.columns:
+        print("\nArea Type Classification:")
+        area_counts = gdf_metadata['area_type'].value_counts()
+        for area, count in area_counts.items():
+            print(f"  {area.capitalize()}: {count} stations")
+    
     print("\nStations by Terrain Type:")
-    for terrain in gdf_metadata['terrain_type'].unique():
-        stations = gdf_metadata[gdf_metadata['terrain_type'] == terrain]['station_code'].tolist()
+    for terrain in gdf_metadata['analysis_terrain'].unique():
+        stations = gdf_metadata[gdf_metadata['analysis_terrain'] == terrain]['station_code'].tolist()
         print(f"\n  {terrain}:")
         print(f"    {', '.join(map(str, stations))}")
     
@@ -222,7 +247,8 @@ def analyze_spatial_variance(df_panel, gdf_metadata):
     gdf_metadata = classify_stations_by_terrain(gdf_metadata)
     
     # Create station to terrain mapping
-    station_terrain = dict(zip(gdf_metadata['station_code'], gdf_metadata['terrain_type']))
+    terrain_col = 'analysis_terrain' if 'analysis_terrain' in gdf_metadata.columns else 'terrain_type'
+    station_terrain = dict(zip(gdf_metadata['station_code'], gdf_metadata[terrain_col]))
     
     # Reset index to work with station_id
     df_work = df_panel.reset_index()

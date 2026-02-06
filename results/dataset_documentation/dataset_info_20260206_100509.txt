@@ -3,7 +3,7 @@
   DATA PREPROCESSING PIPELINE
 ================================================================================
 
-Execution Time: 2026-02-05 15:44:22
+Execution Time: 2026-02-06 10:05:09
 Base Directory: /Users/ettoremiglioranza/Projects/gar4ds
 Data Directory: /Users/ettoremiglioranza/Projects/gar4ds/data
 Results Directory: /Users/ettoremiglioranza/Projects/gar4ds/results/dataset_documentation
@@ -12,11 +12,8 @@ Results Directory: /Users/ettoremiglioranza/Projects/gar4ds/results/dataset_docu
   STEP 0: Checking Existing Processed Files
 ================================================================================
 
-Metadata GeoJSON exists: ✓ Yes
-Dataset Parquet exists: ✓ Yes
-
-⚠ All processed files already exist. Skipping conversion steps.
-  To regenerate, delete the processed files and run again.
+Metadata GeoJSON exists: ✗ No
+Dataset Parquet exists: ✗ No
 
 ================================================================================
   STEP 1: Metadata Conversion
@@ -25,8 +22,17 @@ Dataset Parquet exists: ✓ Yes
 
 --- Converting Metadata CSV to GeoJSON ---
 
-✓ GeoJSON already exists: pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson
-  Skipping conversion.
+Reading metadata from: pm10_era5_land_era5_reanalysis_blh_stations_metadata.csv
+  Records: 37
+  Columns: ['region', 'station_code', 'station_name', 'latitude', 'longitude']
+
+Creating Point geometries from latitude/longitude...
+Saving GeoJSON to: pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson
+✓ Metadata successfully converted to GeoJSON
+
+⚠ DISRUPTIVE OPERATION: New GeoJSON file created
+  File: /Users/ettoremiglioranza/Projects/gar4ds/data/pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson
+  Action: Converted CSV to GeoJSON with spatial geometry
 
 ================================================================================
   STEP 2: Dataset Conversion
@@ -35,8 +41,24 @@ Dataset Parquet exists: ✓ Yes
 
 --- Converting Dataset CSV to Parquet ---
 
-✓ Parquet already exists: pm10_era5_land_era5_reanalysis_blh.parquet
-  Skipping conversion.
+Reading dataset from: pm10_era5_land_era5_reanalysis_blh.csv
+  File size: 0.82 GB
+  This may take a few minutes...
+
+Parsing CSV (detecting data types)...
+  Records: 96,432
+  Columns: 741
+  Memory usage: 545.17 MB
+
+Saving to Parquet format: pm10_era5_land_era5_reanalysis_blh.parquet
+✓ Dataset successfully converted to Parquet
+  Parquet size: 0.56 GB
+  Compression: 31.0% reduction
+
+⚠ DISRUPTIVE OPERATION: New Parquet file created
+  File: /Users/ettoremiglioranza/Projects/gar4ds/data/pm10_era5_land_era5_reanalysis_blh.parquet
+  Action: Converted CSV to compressed Parquet format
+  Note: Original CSV preserved, no data loss
 
 ================================================================================
   COMPREHENSIVE DATASET ANALYSIS
@@ -102,15 +124,15 @@ Missing Values Analysis:
 Numeric Columns: 740
 
 Sample Statistics (first 10 columns):
-       pm10_Alto-Adige_AB2  pm10_Alto-Adige_BR1  ...  pm10_Lombardia_ARPAL_001  pm10_Lombardia_ARPAL_002
-count             96432.00             96432.00  ...                  96432.00                  96432.00
-mean                 16.91                14.47  ...                     30.58                     30.88
-std                  11.72                11.27  ...                     23.32                     21.73
-min                  -4.00                 0.00  ...                      0.00                      0.02
-25%                   8.00                 7.00  ...                     14.89                     15.94
-50%                  15.00                12.00  ...                     25.06                     25.02
-75%                  23.00                19.00  ...                     39.36                     39.49
-max                 204.00               224.00  ...                    685.01                    287.17
+       pm10_Alto-Adige_AB2  ...  pm10_Lombardia_ARPAL_002
+count             96432.00  ...                  96432.00
+mean                 16.91  ...                     30.88
+std                  11.72  ...                     21.73
+min                  -4.00  ...                      0.02
+25%                   8.00  ...                     15.94
+50%                  15.00  ...                     25.02
+75%                  23.00  ...                     39.49
+max                 204.00  ...                    287.17
 
 [8 rows x 10 columns]
 
@@ -938,7 +960,7 @@ Most Common Time Interval: 0 days 01:00:00
   PIPELINE COMPLETED SUCCESSFULLY
 ================================================================================
 
-Output Log Saved: /Users/ettoremiglioranza/Projects/gar4ds/results/dataset_documentation/dataset_info_20260205_154422.txt
+Output Log Saved: /Users/ettoremiglioranza/Projects/gar4ds/results/dataset_documentation/dataset_info_20260206_100509.txt
 
 Processed Files:
   - Metadata GeoJSON: /Users/ettoremiglioranza/Projects/gar4ds/data/pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson

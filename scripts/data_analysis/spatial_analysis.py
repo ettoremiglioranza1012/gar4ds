@@ -1,31 +1,58 @@
-import polars as pl
+"""
+SPATIAL ANALYSIS - REFACTORED FOR PANEL DATA
+=============================================
+
+This script performs spatial autocorrelation and clustering analysis on the 
+panel dataset (MultiIndex: week_start, station_id).
+
+STRATEGY:
+1. Load panel_data_matrix.parquet (MultiIndex format)
+2. Time-aggregate to create cross-sectional "Station Profile" (mean over weeks)
+3. Build KNN spatial weights matrix (k=6) from station coordinates
+4. Calculate Moran's I (LISA) for PM10 and meteorological variables
+5. Perform multivariate K-Means clustering (atmospheric regime detection)
+6. Save spatial_weights_knn6.gal file for Spatial Durbin Model
+
+OUTPUTS:
+- Verbose text log: results/spatial_analysis/spatial_analysis_results.txt
+- CSV results: results/spatial_analysis/
+- Visualizations: assets/spatial_analysis/
+- Weights file: weights/spatial_weights_knn6.gal
+"""
+
 import pandas as pd
 import numpy as np
-import pyarrow
 import json
 import matplotlib.pyplot as plt
 import seaborn as sns
-from libpysal.weights import KNN, DistanceBand
+from libpysal.weights import KNN
 from esda.moran import Moran, Moran_Local
 import geopandas as gpd
 from shapely.geometry import Point
-from splot.esda import plot_moran, moran_scatterplot, lisa_cluster
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from pathlib import Path
 import sys
 
-# Create output directories if they don't exist
+# ============================================================================
+# DIRECTORY SETUP
+# ============================================================================
+
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent.parent
 ASSETS_DIR = PROJECT_DIR / 'assets' / 'spatial_analysis'
 RESULTS_DIR = PROJECT_DIR / 'results' / 'spatial_analysis'
+WEIGHTS_DIR = PROJECT_DIR / 'weights'
+
+# Create directories
 ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Set up output file for text results
+# Output file for verbose logging
 output_file = RESULTS_DIR / 'spatial_analysis_results.txt'
+
 
 class Tee:
     """Helper class to write to both console and file"""
@@ -43,126 +70,434 @@ class Tee:
 
 
 # ============================================================================
-# FUNCTION DEFINITIONS - Must be defined before main execution
+# FUNCTION DEFINITIONS
 # ============================================================================
 
-def run_parallel_lisa_analysis(spatial_df, valid_stations, coords, w, 
-                               available_vars, meta_df, assets_dir, results_dir):
+def load_panel_data(data_path):
     """
-    Run separate LISA analysis for each environmental variable.
-    This reveals which variables show spatial clustering patterns.
+    Load panel data matrix with MultiIndex (week_start, station_id).
     
-    REFINED STRATEGY:
-    - Global Moran's I: Calculated for ALL variables (proves regressors are spatially structured)
-    - LISA Cluster Maps: Generated ONLY for PM10 (focused visual narrative)
-    - Meteorological Variables: Statistical validation only, no map generation
+    Args:
+        data_path: Path to panel_data_matrix.parquet
+        
+    Returns:
+        pd.DataFrame with MultiIndex
     """
-    print("\n[A1] Running LISA for each variable...")
+    print("\n[1] LOADING PANEL DATA")
+    print("=" * 80)
+    print(f"    Loading: {data_path}")
     
-    # Focus on key environmental variables
-    priority_vars = ['PM10', 'TEMP', 'BLH', 'WS', 'PRECIP', 'PRESS', 'RAD']
-    vars_to_analyze = [v for v in priority_vars if v in available_vars]
+    df = pd.read_parquet(data_path)
     
-    if not vars_to_analyze:
-        print("    ⚠ No environmental variables found for analysis")
-        return
+    print(f"    ✓ Shape: {df.shape} (observations × variables)")
+    print(f"    ✓ Index: {df.index.names}")
+    print(f"    ✓ Columns: {list(df.columns)}")
     
-    print(f"    ✓ Analyzing: {vars_to_analyze}")
+    # Check index structure
+    if len(df.index.names) == 2:
+        print(f"    ✓ MultiIndex confirmed: {df.index.names}")
+        n_weeks = df.index.get_level_values(0).nunique()
+        n_stations = df.index.get_level_values(1).nunique()
+        print(f"    ✓ Time periods: {n_weeks}")
+        print(f"    ✓ Stations: {n_stations}")
+    else:
+        print(f"    ⚠ Warning: Expected MultiIndex, found {df.index.names}")
     
-    # Store results for each variable
-    all_variable_results = []
-    global_stats = []
+    return df
+
+
+def load_station_metadata(meta_path):
+    """
+    Load station metadata with coordinates from GeoJSON.
     
-    for var in vars_to_analyze:
-        print(f"\n    --- Analyzing {var} ---")
+    Args:
+        meta_path: Path to pm10_era5_land_era5_reanalysis_blh_stations_metadata_with_elevation.geojson
         
-        # Extract mean values for this variable
-        var_cols = [f'{var}_{s}' for s in valid_stations]
-        var_means = spatial_df.select(var_cols).mean().to_pandas().iloc[0].values
+    Returns:
+        pd.DataFrame with station_code as index
+    """
+    print("\n[2] LOADING STATION METADATA")
+    print("=" * 80)
+    print(f"    Loading: {meta_path}")
+    
+    # Read GeoJSON with geopandas
+    gdf = gpd.read_file(meta_path)
+    
+    # Extract coordinates from geometry
+    gdf['Longitude'] = gdf.geometry.x
+    gdf['Latitude'] = gdf.geometry.y
+    
+    # Build metadata DataFrame with all available fields
+    meta_dict = {
+        'station_code': gdf['station_code'],
+        'station_name': gdf['station_name'],
+        'region': gdf['region'],
+        'Longitude': gdf['Longitude'],
+        'Latitude': gdf['Latitude']
+    }
+    
+    # Add elevation and classification fields if available
+    if 'elevation' in gdf.columns:
+        meta_dict['elevation'] = gdf['elevation']
+    if 'terrain_type' in gdf.columns:
+        meta_dict['terrain_type'] = gdf['terrain_type']
+    if 'area_type' in gdf.columns:
+        meta_dict['area_type'] = gdf['area_type']
+    
+    meta_df = pd.DataFrame(meta_dict).set_index('station_code')
+    
+    print(f"    ✓ Loaded {len(meta_df)} stations")
+    print(f"    ✓ Columns: {list(meta_df.columns)}")
+    print(f"    ✓ Regions: {meta_df['region'].unique().tolist()}")
+    print(f"    ✓ Coordinate range:")
+    print(f"        Longitude: [{meta_df['Longitude'].min():.4f}, {meta_df['Longitude'].max():.4f}]")
+    print(f"        Latitude: [{meta_df['Latitude'].min():.4f}, {meta_df['Latitude'].max():.4f}]")
+    
+    # Display elevation statistics if available
+    if 'elevation' in meta_df.columns:
+        print(f"    ✓ Elevation range: [{meta_df['elevation'].min():.1f}, {meta_df['elevation'].max():.1f}] meters")
+        print(f"    ✓ Average elevation: {meta_df['elevation'].mean():.1f} meters")
+    
+    # Display terrain classification if available
+    if 'terrain_type' in meta_df.columns:
+        terrain_counts = meta_df['terrain_type'].value_counts()
+        print(f"    ✓ Terrain distribution:")
+        for terrain, count in terrain_counts.items():
+            print(f"        {terrain}: {count} stations")
+    
+    return meta_df
+
+
+def create_cross_sectional_view(panel_df):
+    """
+    Time-aggregate panel data to create cross-sectional station profiles.
+    
+    Computes: X̄ᵢ = (1/T) Σₜ Xᵢₜ
+    
+    Args:
+        panel_df: Panel DataFrame with MultiIndex (time, station_id)
         
-        # Global Moran's I
-        mi = Moran(var_means, w)
-        print(f"        Global Moran's I: {mi.I:.4f} (p={mi.p_sim:.4f})")
+    Returns:
+        pd.DataFrame with one row per station (station_id as index)
+    """
+    print("\n[3] CREATING CROSS-SECTIONAL VIEW")
+    print("=" * 80)
+    print("    Strategy: Time-aggregate panel data (mean over all weeks)")
+    print("    Formula: X̄ᵢ = (1/T) Σₜ Xᵢₜ")
+    
+    # Group by station (level 1 of MultiIndex) and compute mean
+    station_profiles = panel_df.groupby(level=1).mean()
+    
+    print(f"\n    ✓ Aggregation complete")
+    print(f"    ✓ Output shape: {station_profiles.shape} (stations × variables)")
+    print(f"    ✓ Stations: {list(station_profiles.index)}")
+    print(f"    ✓ Variables: {list(station_profiles.columns)}")
+    
+    # Display summary statistics
+    print(f"\n    Summary statistics (cross-sectional means):")
+    print(station_profiles.describe().T[['mean', 'std', 'min', 'max']].to_string())
+    
+    return station_profiles
+
+
+def align_stations_with_metadata(station_profiles, meta_df):
+    """
+    Ensure stations in data match stations in metadata.
+    
+    Args:
+        station_profiles: Cross-sectional DataFrame
+        meta_df: Metadata DataFrame
         
-        global_stats.append({
+    Returns:
+        Tuple of (aligned_profiles, aligned_metadata, valid_stations)
+    """
+    print("\n[4] ALIGNING STATIONS WITH METADATA")
+    print("=" * 80)
+    
+    data_stations = set(station_profiles.index)
+    meta_stations = set(meta_df.index)
+    
+    valid_stations = sorted(data_stations & meta_stations)
+    missing_in_meta = data_stations - meta_stations
+    missing_in_data = meta_stations - data_stations
+    
+    print(f"    Data stations: {len(data_stations)}")
+    print(f"    Metadata stations: {len(meta_stations)}")
+    print(f"    Valid stations (intersection): {len(valid_stations)}")
+    
+    if missing_in_meta:
+        print(f"    ⚠ Stations in data but not in metadata: {missing_in_meta}")
+    if missing_in_data:
+        print(f"    ℹ Stations in metadata but not in data: {missing_in_data}")
+    
+    # Filter to valid stations
+    aligned_profiles = station_profiles.loc[valid_stations]
+    aligned_metadata = meta_df.loc[valid_stations]
+    
+    print(f"\n    ✓ Aligned dataset shape: {aligned_profiles.shape}")
+    print(f"    ✓ Valid stations: {valid_stations}")
+    
+    return aligned_profiles, aligned_metadata, valid_stations
+
+
+def build_spatial_weights(coords, k=6):
+    """
+    Build KNN spatial weights matrix from station coordinates.
+    
+    Args:
+        coords: Numpy array of shape (n_stations, 2) with (longitude, latitude)
+        k: Number of nearest neighbors (default: 6)
+        
+    Returns:
+        libpysal.weights.KNN object
+    """
+    print("\n[5] BUILDING SPATIAL WEIGHTS MATRIX")
+    print("=" * 80)
+    print(f"    Method: K-Nearest Neighbors (KNN)")
+    print(f"    K: {k} neighbors")
+    print(f"    Justification: KNN ensures logical connectivity in Alpine terrain")
+    print(f"                   (avoids linking valleys across mountains)")
+    
+    w = KNN.from_array(coords, k=k)
+    w.transform = 'r'  # Row-standardize weights
+    
+    print(f"\n    ✓ Weights matrix created")
+    print(f"    ✓ Number of observations: {w.n}")
+    print(f"    ✓ Average neighbors: {w.mean_neighbors:.2f}")
+    print(f"    ✓ Transformation: Row-standardized")
+    
+    # Calculate distance statistics
+    distances = []
+    for i in range(w.n):
+        origin = coords[i]
+        for j in w.neighbors[i]:
+            neighbor = coords[j]
+            dist = np.sqrt(((origin - neighbor)**2).sum())
+            distances.append(dist)
+    
+    distances = np.array(distances)
+    print(f"\n    Connection distance statistics:")
+    print(f"        Mean: {distances.mean():.4f}°")
+    print(f"        Median: {np.median(distances):.4f}°")
+    print(f"        Min: {distances.min():.4f}°")
+    print(f"        Max: {distances.max():.4f}°")
+    
+    # Approximate conversion to km (1° ≈ 111 km at this latitude)
+    print(f"\n    Approximate distance in km (1° ≈ 111 km):")
+    print(f"        Mean: {distances.mean() * 111:.2f} km")
+    print(f"        Median: {np.median(distances) * 111:.2f} km")
+    print(f"        Max: {distances.max() * 111:.2f} km")
+    
+    return w
+
+
+def save_spatial_weights_gal(w, station_ids, output_path):
+    """
+    Save spatial weights matrix in GAL format for Spatial Durbin Model.
+    
+    Args:
+        w: libpysal.weights object
+        station_ids: List of station identifiers
+        output_path: Path to save .gal file
+    """
+    print("\n[6] SAVING SPATIAL WEIGHTS (.GAL FORMAT)")
+    print("=" * 80)
+    print(f"    Output: {output_path}")
+    print(f"    Purpose: Input for Spatial Durbin Model regression")
+    
+    # Write GAL file
+    with open(output_path, 'w') as f:
+        # Header: number of observations
+        f.write(f"0 {w.n} {output_path.name} station_id\n")
+        
+        # For each station, write neighbors
+        for i, station_id in enumerate(station_ids):
+            neighbors = w.neighbors[i]
+            n_neighbors = len(neighbors)
+            f.write(f"{station_id} {n_neighbors}\n")
+            
+            # Write neighbor IDs
+            neighbor_ids = [station_ids[j] for j in neighbors]
+            f.write(" ".join(neighbor_ids) + "\n")
+    
+    print(f"    ✓ GAL file saved successfully")
+    print(f"    ✓ Format: Station_ID followed by neighbor Station_IDs")
+    print(f"    ✓ Total connections: {sum(len(w.neighbors[i]) for i in range(w.n))}")
+
+
+def calculate_global_morans_i(station_profiles, w):
+    """
+    Calculate Global Moran's I for all variables.
+    
+    Tests spatial autocorrelation: Are similar values clustered in space?
+    
+    Args:
+        station_profiles: Cross-sectional DataFrame
+        w: Spatial weights matrix
+        
+    Returns:
+        pd.DataFrame with Moran's I statistics for each variable
+    """
+    print("\n[7] CALCULATING GLOBAL MORAN'S I")
+    print("=" * 80)
+    print("    Purpose: Test spatial autocorrelation (justify spatial lag term ρWy)")
+    print("    Null hypothesis: Values are randomly distributed in space")
+    print("    Interpretation: I > 0 → Clustering, I < 0 → Dispersion, I ≈ 0 → Random")
+    
+    results = []
+    
+    for var in station_profiles.columns:
+        print(f"\n    --- {var} ---")
+        
+        values = station_profiles[var].values
+        
+        # Calculate Global Moran's I
+        mi = Moran(values, w)
+        
+        pattern = 'Random'
+        if mi.p_sim < 0.05:
+            pattern = 'Clustered' if mi.I > 0 else 'Dispersed'
+        
+        print(f"        Moran's I: {mi.I:.4f}")
+        print(f"        P-value: {mi.p_sim:.4f}")
+        print(f"        Z-score: {mi.z_sim:.4f}")
+        print(f"        Pattern: {pattern} {'***' if mi.p_sim < 0.001 else '**' if mi.p_sim < 0.01 else '*' if mi.p_sim < 0.05 else ''}")
+        
+        results.append({
             'Variable': var,
             'Morans_I': mi.I,
+            'Expected_I': mi.EI,
+            'Variance_I': mi.VI_sim,
+            'Z_score': mi.z_sim,
             'P_value': mi.p_sim,
             'Significant': 'Yes' if mi.p_sim < 0.05 else 'No',
-            'Pattern': 'Clustered' if mi.I > 0 and mi.p_sim < 0.05 else 
-                      'Dispersed' if mi.I < 0 and mi.p_sim < 0.05 else 'Random'
+            'Pattern': pattern
         })
+    
+    results_df = pd.DataFrame(results)
+    
+    print("\n" + "=" * 80)
+    print("GLOBAL MORAN'S I SUMMARY")
+    print("=" * 80)
+    print(results_df.to_string(index=False))
+    
+    return results_df
+
+
+def calculate_local_morans_i(station_profiles, w, station_ids):
+    """
+    Calculate Local Moran's I (LISA) for all variables.
+    
+    Identifies spatial clusters and outliers for each variable.
+    
+    Args:
+        station_profiles: Cross-sectional DataFrame
+        w: Spatial weights matrix
+        station_ids: List of station identifiers
         
-        # Local Moran's I (LISA)
-        lisa = Moran_Local(var_means, w)
+    Returns:
+        pd.DataFrame with LISA statistics for each station-variable pair
+    """
+    print("\n[8] CALCULATING LOCAL MORAN'S I (LISA)")
+    print("=" * 80)
+    print("    Purpose: Identify spatial clusters and outliers")
+    print("    Cluster types:")
+    print("        High-High: High values surrounded by high values (hotspots)")
+    print("        Low-Low: Low values surrounded by low values (coldspots)")
+    print("        High-Low: High values surrounded by low values (spatial outliers)")
+    print("        Low-High: Low values surrounded by high values (spatial outliers)")
+    
+    all_results = []
+    
+    for var in station_profiles.columns:
+        print(f"\n    --- {var} ---")
+        
+        values = station_profiles[var].values
+        
+        # Calculate Local Moran's I
+        lisa = Moran_Local(values, w)
         
         # Classify clusters
         sig = lisa.p_sim < 0.05
         hotspots = sig & (lisa.q == 1)  # High-High
         coldspots = sig & (lisa.q == 3)  # Low-Low
-        high_low = sig & (lisa.q == 4)   # High-Low (outliers)
-        low_high = sig & (lisa.q == 2)   # Low-High (outliers)
+        high_low = sig & (lisa.q == 4)  # High-Low (outliers)
+        low_high = sig & (lisa.q == 2)  # Low-High (outliers)
         
-        print(f"        High-High: {hotspots.sum()}, Low-Low: {coldspots.sum()}")
-        print(f"        High-Low: {high_low.sum()}, Low-High: {low_high.sum()}")
+        print(f"        High-High (hotspots): {hotspots.sum()}")
+        print(f"        Low-Low (coldspots): {coldspots.sum()}")
+        print(f"        High-Low (outliers): {high_low.sum()}")
+        print(f"        Low-High (outliers): {low_high.sum()}")
+        print(f"        Not significant: {(~sig).sum()}")
         
-        # Store detailed results
-        for i, station in enumerate(valid_stations):
-            all_variable_results.append({
-                'Station': station,
+        # Store results for each station
+        for i, station_id in enumerate(station_ids):
+            cluster_type = 'Not Significant'
+            if hotspots[i]:
+                cluster_type = 'High-High'
+            elif coldspots[i]:
+                cluster_type = 'Low-Low'
+            elif high_low[i]:
+                cluster_type = 'High-Low'
+            elif low_high[i]:
+                cluster_type = 'Low-High'
+            
+            all_results.append({
+                'Station': station_id,
                 'Variable': var,
-                'Mean_Value': var_means[i],
+                'Value': values[i],
                 'Local_Morans_I': lisa.Is[i],
                 'P_value': lisa.p_sim[i],
-                'Cluster_Type': 'High-High' if hotspots[i] else
-                               'Low-Low' if coldspots[i] else
-                               'High-Low' if high_low[i] else
-                               'Low-High' if low_high[i] else
-                               'Not Significant',
+                'Z_score': lisa.z_sim[i],
+                'Quadrant': lisa.q[i],
+                'Cluster_Type': cluster_type,
                 'Significant': sig[i]
             })
-        
-        # Visualization - only generate map for PM10
-        if var == 'PM10':
-            create_variable_lisa_map(var, var_means, coords, valid_stations, 
-                                    hotspots, coldspots, high_low, low_high,
-                                    assets_dir)
-            print(f"        ✓ LISA cluster map generated for {var}")
-        else:
-            print(f"        → Meteorological variable - map generation skipped (statistical validation only)")
     
-    # Save global statistics
-    print(f"\n[A2] Saving results...")
-    global_df = pd.DataFrame(global_stats)
-    global_df.to_csv(results_dir / 'optionA_global_morans_I_by_variable.csv', index=False)
-    print(f"    ✓ Global Moran's I results saved (all variables for statistical validation)")
+    results_df = pd.DataFrame(all_results)
     
-    # Save detailed LISA results
-    detailed_df = pd.DataFrame(all_variable_results)
-    detailed_df.to_csv(results_dir / 'optionA_lisa_results_all_variables.csv', index=False)
-    print(f"    ✓ Detailed LISA results saved (all variables)")
+    print("\n    ✓ LISA analysis complete for all variables")
     
-    # Create summary comparison plot
-    create_variable_comparison_plot(global_df, assets_dir)
-    
-    # Count how many maps were generated
-    pm10_count = sum(1 for v in vars_to_analyze if v == 'PM10')
-    print(f"\n    📊 Visual outputs: {pm10_count} LISA cluster map(s) generated (PM10 only)")
-    print(f"    📋 Meteorological variables: Statistical validation recorded, maps skipped")
-    
-    # Print summary
-    print(f"\n[A3] Summary of spatial patterns (all variables):")
-    print(global_df.to_string(index=False))
+    return results_df
 
 
-def create_variable_lisa_map(var_name, var_means, coords, valid_stations,
-                             hotspots, coldspots, high_low, low_high, assets_dir):
-    """Create LISA cluster map for a specific variable"""
+def create_lisa_maps(station_profiles, w, station_ids, coords, assets_dir):
+    """
+    Create LISA cluster maps for PM10 (primary focus).
     
+    Args:
+        station_profiles: Cross-sectional DataFrame
+        w: Spatial weights matrix
+        station_ids: List of station identifiers
+        coords: Station coordinates
+        assets_dir: Directory to save plots
+    """
+    print("\n[9] CREATING LISA CLUSTER MAPS")
+    print("=" * 80)
+    print("    Focus: PM10 (primary pollutant)")
+    
+    if 'pm10' not in station_profiles.columns:
+        print("    ⚠ PM10 not found in variables - skipping visualization")
+        return
+    
+    var = 'pm10'
+    values = station_profiles[var].values
+    
+    # Calculate LISA
+    lisa = Moran_Local(values, w)
+    
+    # Classify clusters
+    sig = lisa.p_sim < 0.05
+    hotspots = sig & (lisa.q == 1)
+    coldspots = sig & (lisa.q == 3)
+    high_low = sig & (lisa.q == 4)
+    low_high = sig & (lisa.q == 2)
+    not_sig = ~sig
+    
+    # Create figure
     fig, ax = plt.subplots(figsize=(14, 10))
     
-    # Base plot - not significant
-    not_sig = ~(hotspots | coldspots | high_low | low_high)
+    # Plot not significant stations
     if not_sig.sum() > 0:
         ax.scatter(coords[not_sig, 0], coords[not_sig, 1],
                   c='lightgrey', edgecolor='k', s=80, alpha=0.6,
@@ -171,17 +506,16 @@ def create_variable_lisa_map(var_name, var_means, coords, valid_stations,
     # Plot clusters
     if hotspots.sum() > 0:
         ax.scatter(coords[hotspots, 0], coords[hotspots, 1],
-                  c='red', edgecolor='k', s=150, label='High-High',
+                  c='red', edgecolor='k', s=150, label='High-High (Hotspot)',
                   zorder=3, marker='s')
-        # Annotate hotspots
         for idx in np.where(hotspots)[0]:
-            ax.annotate(valid_stations[idx], (coords[idx, 0], coords[idx, 1]),
+            ax.annotate(station_ids[idx], (coords[idx, 0], coords[idx, 1]),
                        fontsize=8, fontweight='bold',
                        xytext=(3, 3), textcoords='offset points')
     
     if coldspots.sum() > 0:
         ax.scatter(coords[coldspots, 0], coords[coldspots, 1],
-                  c='blue', edgecolor='k', s=150, label='Low-Low',
+                  c='blue', edgecolor='k', s=150, label='Low-Low (Coldspot)',
                   zorder=3, marker='s')
     
     if high_low.sum() > 0:
@@ -196,27 +530,38 @@ def create_variable_lisa_map(var_name, var_means, coords, valid_stations,
     
     ax.set_xlabel('Longitude', fontsize=12)
     ax.set_ylabel('Latitude', fontsize=12)
-    ax.set_title(f'Spatial Clustering: {var_name}\n(LISA Analysis)', 
+    ax.set_title(f'Spatial Clustering: PM10\n(LISA Analysis)', 
                 fontsize=14, fontweight='bold')
     ax.legend(loc='best', fontsize=10)
     ax.grid(True, linestyle='--', alpha=0.3)
     
     plt.tight_layout()
-    plot_path = assets_dir / f'optionA_lisa_map_{var_name}.png'
+    plot_path = assets_dir / 'lisa_cluster_map_pm10.png'
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-    print(f"        ✓ Saved map: {plot_path.name}")
     plt.close()
+    
+    print(f"    ✓ LISA cluster map saved: {plot_path.name}")
 
 
-def create_variable_comparison_plot(global_df, assets_dir):
-    """Create comparison plot of Moran's I across variables"""
+def create_morans_i_comparison(global_morans_df, assets_dir):
+    """
+    Create bar chart comparing Moran's I across variables.
     
-    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+    Args:
+        global_morans_df: DataFrame with Moran's I statistics
+        assets_dir: Directory to save plot
+    """
+    print("\n[10] CREATING MORAN'S I COMPARISON PLOT")
+    print("=" * 80)
     
-    # Plot: Moran's I values
-    colors = ['red' if p < 0.05 else 'gray' for p in global_df['P_value']]
-    bars = ax.barh(global_df['Variable'], global_df['Morans_I'], 
-                    color=colors, edgecolor='black')
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Color bars by significance
+    colors = ['red' if p < 0.05 else 'gray' for p in global_morans_df['P_value']]
+    
+    bars = ax.barh(global_morans_df['Variable'], global_morans_df['Morans_I'],
+                   color=colors, edgecolor='black')
+    
     ax.axvline(x=0, color='black', linestyle='-', linewidth=0.8)
     ax.set_xlabel("Moran's I", fontsize=12)
     ax.set_title("Global Spatial Autocorrelation by Variable\n(Red = Significant p<0.05)",
@@ -224,90 +569,91 @@ def create_variable_comparison_plot(global_df, assets_dir):
     ax.grid(axis='x', alpha=0.3)
     
     # Add value labels
-    for i, (var, val, p) in enumerate(zip(global_df['Variable'], 
-                                           global_df['Morans_I'],
-                                           global_df['P_value'])):
+    for i, (var, val, p) in enumerate(zip(global_morans_df['Variable'],
+                                           global_morans_df['Morans_I'],
+                                           global_morans_df['P_value'])):
         label = f"{val:.3f}*" if p < 0.05 else f"{val:.3f}"
         ax.text(val + 0.01, i, label, va='center', fontsize=9)
     
     plt.tight_layout()
-    plot_path = assets_dir / 'optionA_variable_comparison.png'
+    plot_path = assets_dir / 'global_morans_i_comparison.png'
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-    print(f"    ✓ Comparison plot saved: {plot_path.name}")
     plt.close()
+    
+    print(f"    ✓ Comparison plot saved: {plot_path.name}")
 
 
-def run_multivariate_clustering(spatial_df, valid_stations, coords,
-                                available_vars, meta_df, assets_dir, results_dir):
+def perform_multivariate_clustering(station_profiles, coords, station_ids,
+                                    assets_dir, results_dir):
     """
-    Multivariate clustering analysis combining all environmental variables.
-    Identifies stations with similar meteorological profiles and overlays
-    them spatially.
+    Perform K-Means clustering on meteorological profiles.
     
-    CRITICAL FOR REGIME DEFINITION:
-    - Defines "Source vs. Receptor" atmospheric regimes based on meteorological profiles
-    - K-Means clustering identifies distinct environmental conditions
-    - Cluster profiles are essential for understanding pollution dynamics
+    Identifies atmospheric regimes (e.g., mountain vs plain stations).
+    
+    Args:
+        station_profiles: Cross-sectional DataFrame
+        coords: Station coordinates
+        station_ids: List of station identifiers
+        assets_dir: Directory for visualizations
+        results_dir: Directory for CSV results
+        
+    Returns:
+        Tuple of (cluster_assignments_df, cluster_profiles_df)
     """
-    print("\n[C1] Preparing multivariate feature matrix...")
-    print("    (This analysis defines atmospheric regimes for source/receptor classification)")
+    print("\n[11] MULTIVARIATE CLUSTERING ANALYSIS")
+    print("=" * 80)
+    print("    Purpose: Detect atmospheric regimes (mountain vs plain)")
+    print("    Method: K-Means clustering on standardized meteorological profiles")
+    print("    Output: Cluster IDs → Dummy variables for regression")
     
-    
-    # Select variables for clustering
-    cluster_vars = ['PM10', 'TEMP', 'BLH', 'WS', 'PRECIP', 'PRESS']
-    cluster_vars = [v for v in cluster_vars if v in available_vars]
+    # Select clustering variables (exclude pm10 to avoid circularity)
+    cluster_vars = [col for col in station_profiles.columns if col != 'pm10']
     
     if len(cluster_vars) < 2:
-        print("    ⚠ Insufficient variables for multivariate analysis")
-        return
+        print("    ⚠ Insufficient variables for clustering - skipping")
+        return None, None
     
-    print(f"    ✓ Using variables: {cluster_vars}")
+    print(f"\n    Clustering variables: {cluster_vars}")
     
-    # Build feature matrix
-    feature_matrix = []
-    feature_names = []
+    # Extract feature matrix
+    X = station_profiles[cluster_vars].values
     
-    for var in cluster_vars:
-        var_cols = [f'{var}_{s}' for s in valid_stations]
-        var_means = spatial_df.select(var_cols).mean().to_pandas().iloc[0].values
-        feature_matrix.append(var_means)
-        feature_names.append(var)
-    
-    # Transpose: rows = stations, columns = variables
-    X = np.column_stack(feature_matrix)
-    
-    print(f"    ✓ Feature matrix shape: {X.shape} (stations × variables)")
+    print(f"    Feature matrix shape: {X.shape} (stations × variables)")
     
     # Standardize features
-    print("\n[C2] Standardizing features...")
+    print("\n    Standardizing features...")
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
-    print(f"    ✓ Features standardized")
+    print("    ✓ Features standardized (mean=0, std=1)")
     
-    # K-means clustering
-    print("\n[C3] Performing K-means clustering...")
+    # Determine optimal number of clusters using elbow method
+    print("\n    Determining optimal number of clusters...")
     optimal_k = determine_optimal_k(X_scaled, max_k=8)
-    print(f"    ✓ Optimal number of clusters: {optimal_k}")
+    print(f"    ✓ Optimal K: {optimal_k}")
     
+    # Perform K-Means clustering
+    print(f"\n    Performing K-Means clustering (k={optimal_k})...")
     kmeans = KMeans(n_clusters=optimal_k, random_state=42, n_init=20)
     cluster_labels = kmeans.fit_predict(X_scaled)
     
     # Count stations per cluster
     unique, counts = np.unique(cluster_labels, return_counts=True)
-    print(f"\n    Cluster sizes:")
+    print(f"\n    Cluster distribution:")
     for c, count in zip(unique, counts):
-        print(f"      Cluster {c}: {count} stations")
+        print(f"        Cluster {c}: {count} stations")
     
     # PCA for visualization
-    print("\n[C4] Performing PCA for visualization...")
+    print("\n    Performing PCA for 2D visualization...")
     pca = PCA(n_components=2)
     X_pca = pca.fit_transform(X_scaled)
-    print(f"    ✓ Explained variance: PC1={pca.explained_variance_ratio_[0]:.2%}, "
-          f"PC2={pca.explained_variance_ratio_[1]:.2%}")
+    var_explained = pca.explained_variance_ratio_
+    print(f"    ✓ PC1 explains {var_explained[0]:.1%} variance")
+    print(f"    ✓ PC2 explains {var_explained[1]:.1%} variance")
+    print(f"    ✓ Total explained: {var_explained.sum():.1%}")
     
-    # Create results dataframe
-    results_df = pd.DataFrame({
-        'Station': valid_stations,
+    # Create cluster assignments DataFrame
+    cluster_df = pd.DataFrame({
+        'Station': station_ids,
         'Cluster': cluster_labels,
         'Longitude': coords[:, 0],
         'Latitude': coords[:, 1],
@@ -316,47 +662,52 @@ def run_multivariate_clustering(spatial_df, valid_stations, coords,
     })
     
     # Add original variable values
-    for i, var in enumerate(cluster_vars):
-        results_df[var] = X[:, i]
+    for var in cluster_vars:
+        cluster_df[var] = station_profiles[var].values
     
-    # Analyze cluster profiles
-    print("\n[C5] Analyzing cluster profiles...")
-    print("    (Defining atmospheric regimes for source/receptor classification)")
-    cluster_profiles = analyze_cluster_profiles(results_df, cluster_vars, cluster_labels)
+    if 'pm10' in station_profiles.columns:
+        cluster_df['pm10'] = station_profiles['pm10'].values
     
-    # Save results
-    print("\n[C6] Saving results...")
-    results_df.to_csv(results_dir / 'optionC_multivariate_clusters.csv', index=False)
-    cluster_profiles.to_csv(results_dir / 'optionC_cluster_profiles.csv', index=False)
-    print(f"    ✓ Cluster assignments saved (station-to-regime mapping)")
-    print(f"    ✓ Cluster profiles saved (regime environmental characteristics)")
+    # Calculate cluster profiles
+    print("\n    Calculating cluster profiles...")
+    profiles = []
+    for cluster_id in sorted(unique):
+        mask = cluster_labels == cluster_id
+        cluster_data = cluster_df[mask]
+        
+        profile = {
+            'Cluster': cluster_id,
+            'N_Stations': mask.sum()
+        }
+        
+        # Mean and std for each variable
+        for var in cluster_vars:
+            profile[f'{var}_mean'] = cluster_data[var].mean()
+            profile[f'{var}_std'] = cluster_data[var].std()
+        
+        if 'pm10' in cluster_df.columns:
+            profile['pm10_mean'] = cluster_data['pm10'].mean()
+            profile['pm10_std'] = cluster_data['pm10'].std()
+        
+        profiles.append(profile)
     
-    # Visualizations
-    print("\n[C7] Creating visualizations...")
-    create_pca_scatter(results_df, X_pca, cluster_labels, optimal_k, 
-                      pca.explained_variance_ratio_, assets_dir)
-    create_spatial_cluster_map(results_df, coords, cluster_labels, optimal_k, assets_dir)
-    create_cluster_heatmap(cluster_profiles, cluster_vars, assets_dir)
-    print(f"    ✓ Generated: PCA scatter, spatial cluster map, and regime heatmap")
+    profiles_df = pd.DataFrame(profiles)
     
-    # Create spatial connectivity map
-    print("\n[C8] Spatial connectivity analysis...")
-    connectivity_stats = create_connectivity_map(results_df, k_neighbors=6, 
-                                                 assets_dir=assets_dir, 
-                                                 results_dir=results_dir)
-    print(f"    ✓ Connectivity visualization complete")
+    print("\n" + "=" * 80)
+    print("CLUSTER PROFILES - ATMOSPHERIC REGIMES")
+    print("=" * 80)
+    print(profiles_df.to_string(index=False))
     
-    # Summary
-    print("\n" + "="*80)
-    print("[C9] CLUSTER PROFILE SUMMARY - ATMOSPHERIC REGIME DEFINITIONS")
-    print("="*80)
-    print("(Critical for identifying Source vs. Receptor station characteristics)\n")
-    print(cluster_profiles.to_string(index=False))
-    print("\n" + "="*80)
+    # Create visualizations
+    create_clustering_visualizations(cluster_df, X_pca, cluster_labels, 
+                                     optimal_k, var_explained, coords,
+                                     cluster_vars, profiles_df, assets_dir)
+    
+    return cluster_df, profiles_df
 
 
 def determine_optimal_k(X, max_k=10):
-    """Use elbow method to determine optimal number of clusters"""
+    """Determine optimal number of clusters using elbow method"""
     inertias = []
     K_range = range(2, min(max_k + 1, len(X) // 2))
     
@@ -365,53 +716,30 @@ def determine_optimal_k(X, max_k=10):
         kmeans.fit(X)
         inertias.append(kmeans.inertia_)
     
-    # Simple elbow detection: find maximum rate of change decrease
+    # Simple elbow detection
     if len(inertias) > 2:
         diffs = np.diff(inertias)
         second_diffs = np.diff(diffs)
-        optimal_k = np.argmin(second_diffs) + 2  # +2 because we started at k=2
+        optimal_k = np.argmin(second_diffs) + 2
     else:
-        optimal_k = 3  # Default
+        optimal_k = 3
     
     return min(optimal_k, 6)  # Cap at 6 for interpretability
 
 
-def analyze_cluster_profiles(results_df, cluster_vars, cluster_labels):
-    """Calculate mean profile for each cluster"""
-    profiles = []
+def create_clustering_visualizations(cluster_df, X_pca, cluster_labels,
+                                     n_clusters, var_explained, coords,
+                                     cluster_vars, profiles_df, assets_dir):
+    """Create all clustering visualization plots"""
     
-    for cluster_id in sorted(np.unique(cluster_labels)):
-        cluster_mask = results_df['Cluster'] == cluster_id
-        cluster_data = results_df[cluster_mask]
-        
-        profile = {'Cluster': cluster_id, 'N_Stations': cluster_mask.sum()}
-        
-        for var in cluster_vars:
-            profile[f'{var}_mean'] = cluster_data[var].mean()
-            profile[f'{var}_std'] = cluster_data[var].std()
-        
-        # Characterize cluster
-        if 'PM10' in cluster_vars:
-            pm10_mean = cluster_data['PM10'].mean()
-            if pm10_mean > results_df['PM10'].quantile(0.66):
-                profile['Characterization'] = 'High Pollution'
-            elif pm10_mean < results_df['PM10'].quantile(0.33):
-                profile['Characterization'] = 'Low Pollution'
-            else:
-                profile['Characterization'] = 'Medium Pollution'
-        
-        profiles.append(profile)
-    
-    return pd.DataFrame(profiles)
-
-
-def create_pca_scatter(results_df, X_pca, cluster_labels, n_clusters, 
-                       explained_var, assets_dir):
-    """Create PCA scatter plot colored by cluster"""
-    
-    fig, ax = plt.subplots(figsize=(12, 9))
+    print("\n[12] CREATING CLUSTERING VISUALIZATIONS")
+    print("=" * 80)
     
     colors = plt.cm.tab10(np.linspace(0, 1, n_clusters))
+    
+    # 1. PCA Scatter Plot
+    print("    Creating PCA scatter plot...")
+    fig, ax = plt.subplots(figsize=(12, 9))
     
     for cluster_id in range(n_clusters):
         mask = cluster_labels == cluster_id
@@ -419,26 +747,21 @@ def create_pca_scatter(results_df, X_pca, cluster_labels, n_clusters,
                   c=[colors[cluster_id]], s=100, edgecolor='black',
                   label=f'Cluster {cluster_id}', alpha=0.7)
     
-    ax.set_xlabel(f'PC1 ({explained_var[0]:.1%} variance)', fontsize=12)
-    ax.set_ylabel(f'PC2 ({explained_var[1]:.1%} variance)', fontsize=12)
-    ax.set_title('Multivariate Station Clustering\n(PCA Projection)', 
+    ax.set_xlabel(f'PC1 ({var_explained[0]:.1%} variance)', fontsize=12)
+    ax.set_ylabel(f'PC2 ({var_explained[1]:.1%} variance)', fontsize=12)
+    ax.set_title('Multivariate Station Clustering\n(PCA Projection)',
                 fontsize=14, fontweight='bold')
     ax.legend(loc='best', fontsize=10)
     ax.grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plot_path = assets_dir / 'optionC_pca_clusters.png'
-    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-    print(f"    ✓ PCA scatter saved")
+    plt.savefig(assets_dir / 'cluster_pca_scatter.png', dpi=300, bbox_inches='tight')
     plt.close()
-
-
-def create_spatial_cluster_map(results_df, coords, cluster_labels, n_clusters, assets_dir):
-    """Create spatial map colored by cluster membership"""
+    print("    ✓ PCA scatter saved")
     
+    # 2. Spatial Cluster Map
+    print("    Creating spatial cluster map...")
     fig, ax = plt.subplots(figsize=(14, 10))
-    
-    colors = plt.cm.tab10(np.linspace(0, 1, n_clusters))
     
     for cluster_id in range(n_clusters):
         mask = cluster_labels == cluster_id
@@ -449,9 +772,9 @@ def create_spatial_cluster_map(results_df, coords, cluster_labels, n_clusters, a
                       linewidth=1.5, label=f'Cluster {cluster_id}',
                       alpha=0.8, zorder=3)
             
-            # Annotate some stations in each cluster
-            cluster_stations = results_df[mask]['Station'].values
-            for i, (lon, lat) in enumerate(cluster_coords[:3]):  # Annotate first 3
+            # Annotate some stations
+            cluster_stations = cluster_df[mask]['Station'].values
+            for i, (lon, lat) in enumerate(cluster_coords[:3]):
                 ax.annotate(cluster_stations[i], (lon, lat),
                            fontsize=8, xytext=(3, 3), textcoords='offset points')
     
@@ -464,304 +787,258 @@ def create_spatial_cluster_map(results_df, coords, cluster_labels, n_clusters, a
     ax.grid(True, linestyle='--', alpha=0.3)
     
     plt.tight_layout()
-    plot_path = assets_dir / 'optionC_spatial_clusters.png'
-    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-    print(f"    ✓ Spatial cluster map saved")
+    plt.savefig(assets_dir / 'cluster_spatial_map.png', dpi=300, bbox_inches='tight')
     plt.close()
-
-
-def create_cluster_heatmap(cluster_profiles, cluster_vars, assets_dir):
-    """Create heatmap of cluster profiles"""
+    print("    ✓ Spatial cluster map saved")
     
-    # Extract mean values for heatmap
-    n_clusters = len(cluster_profiles)
+    # 3. Cluster Profile Heatmap
+    print("    Creating cluster profile heatmap...")
     mean_cols = [f'{var}_mean' for var in cluster_vars]
     
-    if not all(col in cluster_profiles.columns for col in mean_cols):
-        print("    ⚠ Cannot create heatmap - missing columns")
-        return
+    if all(col in profiles_df.columns for col in mean_cols):
+        heatmap_data = profiles_df[mean_cols].values
+        
+        # Normalize by column for visualization
+        from sklearn.preprocessing import MinMaxScaler
+        scaler = MinMaxScaler()
+        heatmap_normalized = scaler.fit_transform(heatmap_data.T).T
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        im = ax.imshow(heatmap_normalized, cmap='RdYlBu_r', aspect='auto')
+        
+        ax.set_xticks(np.arange(len(cluster_vars)))
+        ax.set_yticks(np.arange(n_clusters))
+        ax.set_xticklabels(cluster_vars, fontsize=11)
+        ax.set_yticklabels([f'Cluster {i}' for i in range(n_clusters)], fontsize=11)
+        
+        plt.setp(ax.get_xticklabels(), rotation=45, ha='right', rotation_mode='anchor')
+        
+        cbar = plt.colorbar(im, ax=ax)
+        cbar.set_label('Normalized Value\n(0=Low, 1=High)', fontsize=10)
+        
+        # Add text annotations
+        for i in range(n_clusters):
+            for j in range(len(cluster_vars)):
+                ax.text(j, i, f'{heatmap_normalized[i, j]:.2f}',
+                       ha='center', va='center', color='black', fontsize=9)
+        
+        ax.set_title('Cluster Environmental Profiles\n(Normalized Mean Values)',
+                    fontsize=13, fontweight='bold')
+        
+        plt.tight_layout()
+        plt.savefig(assets_dir / 'cluster_profile_heatmap.png', dpi=300, bbox_inches='tight')
+        plt.close()
+        print("    ✓ Cluster heatmap saved")
     
-    heatmap_data = cluster_profiles[mean_cols].values
-    
-    # Normalize by column (variable) for better visualization
-    from sklearn.preprocessing import MinMaxScaler
-    scaler = MinMaxScaler()
-    heatmap_normalized = scaler.fit_transform(heatmap_data.T).T
-    
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    im = ax.imshow(heatmap_normalized, cmap='RdYlBu_r', aspect='auto')
-    
-    # Set ticks
-    ax.set_xticks(np.arange(len(cluster_vars)))
-    ax.set_yticks(np.arange(n_clusters))
-    ax.set_xticklabels(cluster_vars, fontsize=11)
-    ax.set_yticklabels([f'Cluster {i}' for i in range(n_clusters)], fontsize=11)
-    
-    # Rotate x labels
-    plt.setp(ax.get_xticklabels(), rotation=45, ha='right', rotation_mode='anchor')
-    
-    # Add colorbar
-    cbar = plt.colorbar(im, ax=ax)
-    cbar.set_label('Normalized Value\n(0=Low, 1=High)', fontsize=10)
-    
-    # Add text annotations
-    for i in range(n_clusters):
-        for j in range(len(cluster_vars)):
-            text = ax.text(j, i, f'{heatmap_normalized[i, j]:.2f}',
-                          ha='center', va='center', color='black', fontsize=9)
-    
-    ax.set_title('Cluster Environmental Profiles\n(Normalized Mean Values)',
-                fontsize=13, fontweight='bold')
-    
-    plt.tight_layout()
-    plot_path = assets_dir / 'optionC_cluster_heatmap.png'
-    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-    print(f"    ✓ Cluster heatmap saved")
-    plt.close()
+    print("    ✓ All clustering visualizations complete")
 
 
-def create_connectivity_map(results_df, k_neighbors=6, assets_dir=None, results_dir=None):
+def create_connectivity_visualization(w, coords, station_ids, assets_dir):
     """
-    Create spatial connectivity visualization (spider map) showing KNN connections.
-    Calculates distance statistics and saves connectivity graph.
+    Create spider map showing KNN connections.
     
     Args:
-        results_df: DataFrame with Station, Longitude, Latitude, and Cluster columns
-        k_neighbors: Number of nearest neighbors for KNN weights (default: 6)
-        assets_dir: Directory to save visualizations
-        results_dir: Directory to save statistics
+        w: Spatial weights matrix
+        coords: Station coordinates
+        station_ids: List of station identifiers
+        assets_dir: Directory to save plot
     """
-    print(f"\n[D1] Creating spatial connectivity map (KNN k={k_neighbors})...")
+    print("\n[13] CREATING CONNECTIVITY VISUALIZATION")
+    print("=" * 80)
     
-    try:
-        # Import contextily for basemap (optional)
-        import contextily as ctx
-        has_contextily = True
-    except ImportError:
-        has_contextily = False
-        print("    ℹ contextily not available - basemap will be skipped")
+    fig, ax = plt.subplots(figsize=(14, 12))
     
-    # Create GeoDataFrame from coordinates
-    print("    → Converting to GeoDataFrame...")
-    geometry = [Point(xy) for xy in zip(results_df['Longitude'], results_df['Latitude'])]
-    gdf = gpd.GeoDataFrame(results_df, geometry=geometry, crs="EPSG:4326")
-    
-    # Reproject to metric CRS for accurate distance calculation (UTM 32N for Alps region)
-    print("    → Reprojecting to UTM 32N (metric CRS)...")
-    gdf = gdf.to_crs(epsg=32632)
-    
-    # Build KNN weights matrix
-    print(f"    → Building KNN weights matrix (k={k_neighbors})...")
-    w = KNN.from_dataframe(gdf, k=k_neighbors)
-    
-    # Calculate distance statistics
-    print("    → Calculating distance statistics...")
-    min_dists = []
-    max_dists = []
-    all_dists = []
-    
-    for idx, neighbors in w.neighbors.items():
-        origin = gdf.iloc[idx].geometry
-        dists = [origin.distance(gdf.iloc[n].geometry) for n in neighbors]
-        min_dists.append(min(dists))
-        max_dists.append(max(dists))
-        all_dists.extend(dists)
-    
-    # Convert to kilometers
-    avg_nearest = sum(min_dists) / len(min_dists) / 1000
-    avg_furthest = sum(max_dists) / len(max_dists) / 1000
-    median_dist = np.median(all_dists) / 1000
-    
-    print(f"    ✓ Average distance to nearest neighbor: {avg_nearest:.2f} km")
-    print(f"    ✓ Average distance to {k_neighbors}th neighbor: {avg_furthest:.2f} km")
-    print(f"    ✓ Median connection distance: {median_dist:.2f} km")
-    
-    # Save statistics to file if results_dir provided
-    if results_dir:
-        stats_df = pd.DataFrame({
-            'Metric': ['Average nearest neighbor distance (km)', 
-                      f'Average {k_neighbors}th neighbor distance (km)', 
-                      'Median connection distance (km)',
-                      'Min connection distance (km)',
-                      'Max connection distance (km)'],
-            'Value': [avg_nearest, avg_furthest, median_dist, 
-                     min(all_dists)/1000, max(all_dists)/1000]
-        })
-        stats_path = results_dir / 'spatial_connectivity_statistics.csv'
-        stats_df.to_csv(stats_path, index=False)
-        print(f"    ✓ Distance statistics saved to: {stats_path.name}")
-    
-    # Create connectivity visualization
-    print("    → Creating connectivity visualization...")
-    fig, ax = plt.subplots(1, 1, figsize=(14, 12))
-    
-    # Plot edges first (so they appear behind points)
-    for i, neighbors in w.neighbors.items():
-        origin = gdf.iloc[i].geometry
-        for n in neighbors:
-            dest = gdf.iloc[n].geometry
-            ax.plot([origin.x, dest.x], [origin.y, dest.y], 
+    # Plot edges (connections)
+    print("    Drawing connections...")
+    for i in range(w.n):
+        origin = coords[i]
+        for j in w.neighbors[i]:
+            dest = coords[j]
+            ax.plot([origin[0], dest[0]], [origin[1], dest[1]],
                    color='gray', linewidth=0.5, alpha=0.5, zorder=1)
     
-    # Plot points colored by cluster if available
-    if 'Cluster' in gdf.columns:
-        n_clusters = gdf['Cluster'].nunique()
-        colors = plt.cm.tab10(np.linspace(0, 1, n_clusters))
-        
-        for cluster_id in sorted(gdf['Cluster'].unique()):
-            cluster_data = gdf[gdf['Cluster'] == cluster_id]
-            ax.scatter(cluster_data.geometry.x, cluster_data.geometry.y,
-                      c=[colors[cluster_id]], s=100, edgecolor='black',
-                      linewidth=1.5, label=f'Cluster {cluster_id}',
-                      alpha=0.8, zorder=2)
-    else:
-        # Plot all points in red if no cluster information
-        ax.scatter(gdf.geometry.x, gdf.geometry.y,
-                  c='red', s=100, edgecolor='black',
-                  linewidth=1.5, alpha=0.8, zorder=2)
+    # Plot nodes (stations)
+    print("    Drawing stations...")
+    ax.scatter(coords[:, 0], coords[:, 1],
+              c='red', s=100, edgecolor='black',
+              linewidth=1.5, alpha=0.8, zorder=2)
     
-    # Add basemap if contextily is available
-    if has_contextily:
-        try:
-            print("    → Adding basemap...")
-            ctx.add_basemap(ax, crs=gdf.crs.to_string(), 
-                          source=ctx.providers.CartoDB.Positron,
-                          attribution=False)
-            print("    ✓ Basemap added")
-        except Exception as e:
-            print(f"    ⚠ Could not add basemap: {e}")
-    
-    # Styling
-    ax.set_title(f'Spatial Connectivity Network (KNN k={k_neighbors})\n'
-                f'Avg nearest neighbor: {avg_nearest:.1f} km | '
-                f'Avg bandwidth: {avg_furthest:.1f} km',
-                fontsize=14, fontweight='bold', pad=15)
-    
-    if 'Cluster' in gdf.columns:
-        ax.legend(loc='best', fontsize=9, framealpha=0.9)
-    
-    ax.set_xlabel('Easting (UTM 32N, meters)', fontsize=11)
-    ax.set_ylabel('Northing (UTM 32N, meters)', fontsize=11)
-    ax.ticklabel_format(style='plain', axis='both')
-    
-    # Add grid
-    ax.grid(True, alpha=0.3, linestyle='--', zorder=0)
+    ax.set_xlabel('Longitude', fontsize=12)
+    ax.set_ylabel('Latitude', fontsize=12)
+    ax.set_title(f'Spatial Connectivity Network (KNN k={w.mean_neighbors:.0f})',
+                fontsize=14, fontweight='bold')
+    ax.grid(True, linestyle='--', alpha=0.3)
     
     plt.tight_layout()
-    
-    # Save the figure
-    if assets_dir:
-        plot_path = assets_dir / 'spatial_connectivity_graph.png'
-        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-        print(f"    ✓ Connectivity map saved to: {plot_path.name}")
-    
+    plot_path = assets_dir / 'spatial_connectivity_network.png'
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     plt.close()
     
-    print("    ✓ Spatial connectivity analysis complete")
-    
-    return {
-        'avg_nearest_km': avg_nearest,
-        'avg_furthest_km': avg_furthest,
-        'median_km': median_dist,
-        'n_connections': len(all_dists)
-    }
+    print(f"    ✓ Connectivity network saved: {plot_path.name}")
 
 
 # ============================================================================
 # MAIN EXECUTION
 # ============================================================================
 
-# Open output file and redirect stdout
-with open(output_file, 'w') as f:
-    # Create a Tee object that writes to both stdout and file
-    original_stdout = sys.stdout
-    sys.stdout = Tee(sys.stdout, f)
+def main():
+    """Main execution function"""
     
-    try:
-        print("=" * 80)
-        print("MULTIVARIATE SPATIAL ANALYSIS")
-        print("=" * 80)
-        print("\n[1] Loading data...")
+    # Open output file for logging
+    with open(output_file, 'w') as f:
+        original_stdout = sys.stdout
+        sys.stdout = Tee(sys.stdout, f)
         
-        # Load station metadata
-        with open(PROJECT_DIR / 'data' / 'data_stations_metadata.json', 'r') as meta_file:
-            stations_meta = json.load(meta_file)
-        meta_df = pd.DataFrame(stations_meta).set_index('Station_ID')
-        
-        # Try new multi-variable dataset first, fallback to old if not available
-        data_dir = PROJECT_DIR / 'data'
-        if (data_dir / 'spatial_full_matrix.parquet').exists():
-            spatial_df = pl.read_parquet(data_dir / 'spatial_full_matrix.parquet')
-            print(f"    ✓ Loaded multi-variable dataset: {spatial_df.shape}")
-        else:
-            spatial_df = pl.read_parquet(data_dir / 'spatial_pollution_matrix.parquet')
-            print(f"    ✓ Loaded PM10-only dataset: {spatial_df.shape}")
+        try:
+            print("=" * 80)
+            print("SPATIAL ANALYSIS - PANEL DATA REFACTORED VERSION")
+            print("=" * 80)
+            print(f"Analysis Date: {pd.Timestamp.now()}")
+            print(f"\nOutputs:")
+            print(f"    Text Log: {output_file}")
+            print(f"    CSV Results: {RESULTS_DIR}")
+            print(f"    Visualizations: {ASSETS_DIR}")
+            print(f"    Weights File: {WEIGHTS_DIR}")
             
-        print("\n[2] Aligning data and coordinates...")
-        
-        # Detect available variables in the dataset
-        all_columns = spatial_df.columns
-        available_vars = set()
-        station_var_map = {}
-        
-        for col in all_columns:
-            if col == 'Data':
-                continue
-            if '_' in col:
-                var, station = col.split('_', 1)
-                available_vars.add(var)
-                if station not in station_var_map:
-                    station_var_map[station] = []
-                station_var_map[station].append(var)
-        
-        # Get valid stations (those in both data and metadata)
-        data_stations = list(station_var_map.keys())
-        valid_stations = [s for s in data_stations if s in meta_df.index]
-        
-        print(f"    ✓ Found {len(valid_stations)} valid stations")
-        print(f"    ✓ Available variables: {sorted(available_vars)}")
-        
-        # Extract coordinates
-        coords = meta_df.loc[valid_stations, ['Longitude', 'Latitude']].values
-        
-        # 3. Define Spatial Weights Matrix (W)
-        print("\n[3] Creating spatial weights matrix...")
-        w = KNN.from_array(coords, k=6)
-        w.transform = 'r'  # Row-standardize weights
-        print(f"    ✓ KNN weights created (k=6)")
-        
-        # =====================================================================
-        # OPTION A: PARALLEL LISA ANALYSIS FOR EACH VARIABLE
-        # =====================================================================
-        print("\n" + "=" * 80)
-        print("OPTION A: PARALLEL SPATIAL ANALYSIS FOR EACH VARIABLE")
-        print("=" * 80)
-        
-        run_parallel_lisa_analysis(spatial_df, valid_stations, coords, w, 
-                                   available_vars, meta_df, ASSETS_DIR, RESULTS_DIR)
-        
-        # =====================================================================
-        # OPTION C: MULTIVARIATE CLUSTERING ANALYSIS
-        # =====================================================================
-        print("\n" + "=" * 80)
-        print("OPTION C: MULTIVARIATE CLUSTERING ANALYSIS")
-        print("=" * 80)
-        
-        run_multivariate_clustering(spatial_df, valid_stations, coords, 
-                                    available_vars, meta_df, ASSETS_DIR, RESULTS_DIR)
-        
-        # Analysis complete
-        print("\n" + "=" * 80)
-        print("ANALYSIS COMPLETE")
-        print("=" * 80)
-        print(f"\n    📁 Text Output: {output_file}")
-        print(f"    📊 CSV Results: {RESULTS_DIR}")
-        print(f"    🖼️  Visualizations: {ASSETS_DIR}")
-        print("\n")
-        
-    finally:
-        # Restore original stdout
-        sys.stdout = original_stdout
+            # ================================================================
+            # STEP 1-2: LOAD DATA
+            # ================================================================
+            
+            panel_df = load_panel_data(PROJECT_DIR / 'data' / 'panel_data_matrix.parquet')
+            meta_df = load_station_metadata(PROJECT_DIR / 'data' / 'pm10_era5_land_era5_reanalysis_blh_stations_metadata_with_elevation.geojson')
+            
+            # ================================================================
+            # STEP 3: CREATE CROSS-SECTIONAL VIEW
+            # ================================================================
+            
+            station_profiles = create_cross_sectional_view(panel_df)
+            
+            # ================================================================
+            # STEP 4: ALIGN WITH METADATA
+            # ================================================================
+            
+            station_profiles, meta_df, valid_stations = align_stations_with_metadata(
+                station_profiles, meta_df
+            )
+            
+            # Extract coordinates
+            coords = meta_df[['Longitude', 'Latitude']].values
+            
+            # ================================================================
+            # STEP 5-6: BUILD AND SAVE SPATIAL WEIGHTS
+            # ================================================================
+            
+            w = build_spatial_weights(coords, k=6)
+            
+            gal_path = WEIGHTS_DIR / 'spatial_weights_knn6.gal'
+            save_spatial_weights_gal(w, valid_stations, gal_path)
+            
+            # ================================================================
+            # STEP 7-8: MORAN'S I ANALYSIS
+            # ================================================================
+            
+            global_morans_df = calculate_global_morans_i(station_profiles, w)
+            
+            lisa_df = calculate_local_morans_i(station_profiles, w, valid_stations)
+            
+            # ================================================================
+            # STEP 9-10: VISUALIZATIONS
+            # ================================================================
+            
+            create_lisa_maps(station_profiles, w, valid_stations, coords, ASSETS_DIR)
+            
+            create_morans_i_comparison(global_morans_df, ASSETS_DIR)
+            
+            # ================================================================
+            # STEP 11-12: MULTIVARIATE CLUSTERING
+            # ================================================================
+            
+            cluster_df, profiles_df = perform_multivariate_clustering(
+                station_profiles, coords, valid_stations, ASSETS_DIR, RESULTS_DIR
+            )
+            
+            # ================================================================
+            # STEP 13: CONNECTIVITY VISUALIZATION
+            # ================================================================
+            
+            create_connectivity_visualization(w, coords, valid_stations, ASSETS_DIR)
+            
+            # ================================================================
+            # SAVE ALL RESULTS
+            # ================================================================
+            
+            print("\n" + "=" * 80)
+            print("SAVING RESULTS")
+            print("=" * 80)
+            
+            # Save cross-sectional data
+            station_profiles_path = RESULTS_DIR / 'station_profiles_cross_sectional.csv'
+            station_profiles.to_csv(station_profiles_path)
+            print(f"    ✓ Station profiles: {station_profiles_path.name}")
+            
+            # Save Global Moran's I
+            global_path = RESULTS_DIR / 'optionA_global_morans_I_by_variable.csv'
+            global_morans_df.to_csv(global_path, index=False)
+            print(f"    ✓ Global Moran's I: {global_path.name}")
+            
+            # Save LISA results
+            lisa_path = RESULTS_DIR / 'optionA_lisa_results_all_variables.csv'
+            lisa_df.to_csv(lisa_path, index=False)
+            print(f"    ✓ LISA results: {lisa_path.name}")
+            
+            # Save clustering results
+            if cluster_df is not None:
+                cluster_path = RESULTS_DIR / 'optionC_multivariate_clusters.csv'
+                cluster_df.to_csv(cluster_path, index=False)
+                print(f"    ✓ Cluster assignments: {cluster_path.name}")
+                
+                profiles_path = RESULTS_DIR / 'optionC_cluster_profiles.csv'
+                profiles_df.to_csv(profiles_path, index=False)
+                print(f"    ✓ Cluster profiles: {profiles_path.name}")
+            
+            # ================================================================
+            # FINAL SUMMARY
+            # ================================================================
+            
+            print("\n" + "=" * 80)
+            print("ANALYSIS COMPLETE")
+            print("=" * 80)
+            
+            print("\n📊 KEY FINDINGS:")
+            print(f"    • Stations analyzed: {len(valid_stations)}")
+            print(f"    • Variables analyzed: {len(station_profiles.columns)}")
+            print(f"    • Spatial connections: {sum(len(w.neighbors[i]) for i in range(w.n))}")
+            
+            # Summarize significant spatial autocorrelation
+            sig_vars = global_morans_df[global_morans_df['Significant'] == 'Yes']
+            print(f"\n    • Variables with significant spatial autocorrelation: {len(sig_vars)}")
+            if len(sig_vars) > 0:
+                print(f"        {list(sig_vars['Variable'].values)}")
+            
+            # Summarize PM10 clusters
+            if 'pm10' in station_profiles.columns:
+                pm10_lisa = lisa_df[lisa_df['Variable'] == 'pm10']
+                hotspots = pm10_lisa[pm10_lisa['Cluster_Type'] == 'High-High']
+                print(f"\n    • PM10 hotspots identified: {len(hotspots)}")
+                if len(hotspots) > 0:
+                    print(f"        {list(hotspots['Station'].values)}")
+            
+            if cluster_df is not None:
+                print(f"\n    • Atmospheric regimes (clusters): {cluster_df['Cluster'].nunique()}")
+            
+            print(f"\n✅ CRITICAL OUTPUT FOR REGRESSION:")
+            print(f"    → Spatial weights file: {gal_path}")
+            print(f"    → Use this .gal file in your Spatial Durbin Model")
+            
+            print("\n" + "=" * 80)
+            
+        finally:
+            sys.stdout = original_stdout
+    
+    print(f"\n✓ Script completed successfully")
+    print(f"  Check {output_file} for complete log")
 
-print(f"Script completed successfully. Check {RESULTS_DIR} for outputs and {ASSETS_DIR} for plots.")
+
+if __name__ == "__main__":
+    main()

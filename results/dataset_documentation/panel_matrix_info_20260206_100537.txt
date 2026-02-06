@@ -3,7 +3,7 @@
   PANEL MATRIX BUILDER
 ================================================================================
 
-Execution Time: 2026-02-05 16:42:20
+Execution Time: 2026-02-06 10:05:37
 Base Directory: /Users/ettoremiglioranza/Projects/gar4ds
 Data Directory: /Users/ettoremiglioranza/Projects/gar4ds/data
 Results Directory: /Users/ettoremiglioranza/Projects/gar4ds/results/dataset_documentation
@@ -219,7 +219,7 @@ Format: Parquet (compressed)
   PIPELINE COMPLETED SUCCESSFULLY
 ================================================================================
 
-Output Log Saved: /Users/ettoremiglioranza/Projects/gar4ds/results/dataset_documentation/panel_matrix_info_20260205_164220.txt
+Output Log Saved: /Users/ettoremiglioranza/Projects/gar4ds/results/dataset_documentation/panel_matrix_info_20260206_100537.txt
 
 Panel Matrix Created:
   - File: /Users/ettoremiglioranza/Projects/gar4ds/data/panel_data_matrix.parquet

@@ -111,7 +111,7 @@ def load_station_metadata(meta_path):
     Load station metadata with coordinates from GeoJSON.
     
     Args:
-        meta_path: Path to pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson
+        meta_path: Path to pm10_era5_land_era5_reanalysis_blh_stations_metadata_with_elevation.geojson
         
     Returns:
         pd.DataFrame with station_code as index
@@ -127,14 +127,24 @@ def load_station_metadata(meta_path):
     gdf['Longitude'] = gdf.geometry.x
     gdf['Latitude'] = gdf.geometry.y
     
-    # Set station_code as index and create DataFrame
-    meta_df = pd.DataFrame({
+    # Build metadata DataFrame with all available fields
+    meta_dict = {
         'station_code': gdf['station_code'],
         'station_name': gdf['station_name'],
         'region': gdf['region'],
         'Longitude': gdf['Longitude'],
         'Latitude': gdf['Latitude']
-    }).set_index('station_code')
+    }
+    
+    # Add elevation and classification fields if available
+    if 'elevation' in gdf.columns:
+        meta_dict['elevation'] = gdf['elevation']
+    if 'terrain_type' in gdf.columns:
+        meta_dict['terrain_type'] = gdf['terrain_type']
+    if 'area_type' in gdf.columns:
+        meta_dict['area_type'] = gdf['area_type']
+    
+    meta_df = pd.DataFrame(meta_dict).set_index('station_code')
     
     print(f"    ✓ Loaded {len(meta_df)} stations")
     print(f"    ✓ Columns: {list(meta_df.columns)}")
@@ -142,6 +152,18 @@ def load_station_metadata(meta_path):
     print(f"    ✓ Coordinate range:")
     print(f"        Longitude: [{meta_df['Longitude'].min():.4f}, {meta_df['Longitude'].max():.4f}]")
     print(f"        Latitude: [{meta_df['Latitude'].min():.4f}, {meta_df['Latitude'].max():.4f}]")
+    
+    # Display elevation statistics if available
+    if 'elevation' in meta_df.columns:
+        print(f"    ✓ Elevation range: [{meta_df['elevation'].min():.1f}, {meta_df['elevation'].max():.1f}] meters")
+        print(f"    ✓ Average elevation: {meta_df['elevation'].mean():.1f} meters")
+    
+    # Display terrain classification if available
+    if 'terrain_type' in meta_df.columns:
+        terrain_counts = meta_df['terrain_type'].value_counts()
+        print(f"    ✓ Terrain distribution:")
+        for terrain, count in terrain_counts.items():
+            print(f"        {terrain}: {count} stations")
     
     return meta_df
 
@@ -883,8 +905,8 @@ def main():
             # STEP 1-2: LOAD DATA
             # ================================================================
             
-            panel_df = load_panel_data(PROJECT_DIR / 'data' / 'panel_data_matrix.parquet')
-            meta_df = load_station_metadata(PROJECT_DIR / 'data' / 'pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson')
+            panel_df = load_panel_data(PROJECT_DIR / 'data' / 'panel_data_matrix_filtered_for_collinearity.parquet')
+            meta_df = load_station_metadata(PROJECT_DIR / 'data' / 'pm10_era5_land_era5_reanalysis_blh_stations_metadata_with_elevation.geojson')
             
             # ================================================================
             # STEP 3: CREATE CROSS-SECTIONAL VIEW
