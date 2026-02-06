@@ -1,6 +1,6 @@
 """
-SPATIAL ANALYSIS - REFACTORED FOR PANEL DATA
-=============================================
+SPATIAL ANALYSIS - PANEL DATA
+==============================
 
 This script performs spatial autocorrelation and clustering analysis on the 
 panel dataset (MultiIndex: week_start, station_id).
@@ -905,7 +905,7 @@ def main():
             # STEP 1-2: LOAD DATA
             # ================================================================
             
-            panel_df = load_panel_data(PROJECT_DIR / 'data' / 'panel_data_matrix.parquet')
+            panel_df = load_panel_data(PROJECT_DIR / 'data' / 'panel_data_matrix_filtered_for_collinearity.parquet')
             meta_df = load_station_metadata(PROJECT_DIR / 'data' / 'pm10_era5_land_era5_reanalysis_blh_stations_metadata_with_elevation.geojson')
             
             # ================================================================

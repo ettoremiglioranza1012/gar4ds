@@ -17,8 +17,6 @@ Output: Saved to results/multicollinearity_analysis/
 
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 from pathlib import Path
 from datetime import datetime
 from statsmodels.stats.outliers_influence import variance_inflation_factor
@@ -35,11 +33,9 @@ SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent.parent
 DATA_DIR = PROJECT_DIR / 'data'
 RESULTS_DIR = PROJECT_DIR / 'results' / 'multicollinearity_analysis'
-ASSETS_DIR = PROJECT_DIR / 'assets' / 'multicollinearity_analysis'
 
 # Create directories
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Timestamp for output files
 TIMESTAMP = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -172,39 +168,11 @@ def analyze_correlations_by_group(df, groups):
             'matrix': corr_matrix,
             'high_corr_pairs': high_corr_pairs
         }
-        
-        # Plot correlation heatmap
-        plot_correlation_heatmap(corr_matrix, group_name)
     
     return correlation_results
 
 
-def plot_correlation_heatmap(corr_matrix, group_name):
-    """Plot correlation heatmap for a variable group"""
-    fig, ax = plt.subplots(figsize=(10, 8))
-    
-    sns.heatmap(
-        corr_matrix,
-        annot=True,
-        fmt='.2f',
-        cmap='coolwarm',
-        center=0,
-        vmin=-1,
-        vmax=1,
-        square=True,
-        linewidths=1,
-        cbar_kws={'label': 'Correlation Coefficient'},
-        ax=ax
-    )
-    
-    ax.set_title(f'Correlation Matrix: {group_name.upper()} Variables', fontsize=14, fontweight='bold')
-    plt.tight_layout()
-    
-    output_path = ASSETS_DIR / f'correlation_heatmap_{group_name}_{TIMESTAMP}.png'
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    print(f"  Saved heatmap: {output_path.name}")
+
 
 
 # ============================================================================
@@ -317,46 +285,12 @@ def perform_pca_by_group(df, groups):
             'n_components_95': n_components_95,
             'n_original': len(var_list)
         }
-        
-        # Plot scree plot
-        plot_scree(explained_var, cumulative_var, group_name)
+
     
     return pca_results
 
 
-def plot_scree(explained_var, cumulative_var, group_name):
-    """Plot scree plot showing explained variance"""
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    n_components = len(explained_var)
-    x = np.arange(1, n_components + 1)
-    
-    # Bar plot of explained variance
-    ax.bar(x, explained_var * 100, alpha=0.6, label='Individual Variance')
-    
-    # Line plot of cumulative variance
-    ax2 = ax.twinx()
-    ax2.plot(x, cumulative_var * 100, 'r-o', label='Cumulative Variance', linewidth=2)
-    ax2.axhline(y=95, color='g', linestyle='--', label='95% Threshold')
-    
-    ax.set_xlabel('Principal Component', fontsize=12)
-    ax.set_ylabel('Explained Variance (%)', fontsize=12)
-    ax2.set_ylabel('Cumulative Variance (%)', fontsize=12)
-    ax.set_title(f'PCA Scree Plot: {group_name.upper()} Variables', fontsize=14, fontweight='bold')
-    ax.set_xticks(x)
-    
-    # Combine legends
-    lines1, labels1 = ax.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax.legend(lines1 + lines2, labels1 + labels2, loc='center right')
-    
-    plt.tight_layout()
-    
-    output_path = ASSETS_DIR / f'pca_scree_{group_name}_{TIMESTAMP}.png'
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    print(f"  Saved scree plot: {output_path.name}")
+
 
 
 # ============================================================================
@@ -501,11 +435,9 @@ def main():
     
     print_section("ANALYSIS COMPLETE")
     print(f"Results saved to: {RESULTS_DIR}")
-    print(f"Visualizations saved to: {ASSETS_DIR}")
     print(f"\nFiles created:")
     print(f"  - vif_analysis_{TIMESTAMP}.csv")
     print(f"  - recommendations_{TIMESTAMP}.txt")
-    print(f"  - Multiple correlation heatmaps and PCA plots")
     print("\n" + "=" * 80)
 
 
