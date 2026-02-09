@@ -192,30 +192,109 @@ uv run scripts/data_analysis/exploratory_data_analysis.py
 
 ---
 
-### 7. spatial_analysis_new.py
-**Location:** `scripts/data_analysis/spatial_analysis_new.py`  
+### 7. spatial_analysis.py
+**Location:** `scripts/data_analysis/spatial_analysis.py`  
 **Purpose:** Spatial autocorrelation analysis and weights matrix generation
 
 **Inputs:**
 - `data/panel_data_matrix_filtered_for_collinearity.parquet` (12 vars)
-- `data/pm10_era5_land_era5_reanalysis_blh_stations_metadata_with_elevation.geojson`
+- `data/pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson`
 
 **Outputs:**
 - `weights/spatial_weights_knn6.gal` ← **CRITICAL FOR SDM**
-- `results/spatial_analysis/global_morans_I_by_variable.csv`
-- `results/spatial_analysis/lisa_results_all_variables.csv`
-- `results/spatial_analysis/multivariate_clusters.csv`
-- `assets/spatial_analysis/lisa_cluster_map_pm10.png`
-- `assets/spatial_analysis/spatial_connectivity_network.png`
+- `results/spatial_analysis/optionA_global_morans_I_by_variable.csv`
+- `results/spatial_analysis/optionA_lisa_results_all_variables.csv`
+- `results/spatial_analysis/optionC_multivariate_clusters.csv`
+- `results/spatial_analysis/optionC_cluster_profiles.csv`
+- `assets/maps/lisa_clusters_explorer.html` (interactive map)
+- `assets/maps/seasonal_pm10_patterns.html` (interactive map)
 
 **Key findings:**
 - PM10 Moran's I: 0.68 (strong spatial clustering)
 - 11 PM10 hotspots identified
-- 5 atmospheric regimes detected
+- 5 atmospheric regimes detected (multivariate clustering)
 
 **Run command:**
 ```bash
-uv run scripts/data_analysis/spatial_analysis_new.py
+uv run scripts/data_analysis/spatial_analysis.py
+```
+
+---
+
+### 8. model_specification_tests.py
+**Location:** `scripts/data_analysis/model_specification_tests.py`  
+**Purpose:** Test which spatial model specification fits best (SLX, SAR, SEM, SDM, etc.)
+
+**Inputs:**
+- `data/panel_data_matrix_filtered_for_collinearity.parquet`
+- `weights/spatial_weights_knn6.gal`
+
+**Outputs:**
+- `results/model_specification_tests/lrt_test_results.csv`
+- `results/model_specification_tests/information_criteria.csv`
+- `results/model_specification_tests/specification_test_summary.csv`
+- `results/model_specification_tests/lrt_tests_log_*.txt`
+
+**Key findings:**
+- SDM (Spatial Durbin Model) strongly preferred
+- Captures both direct and indirect (spillover) effects
+- Properly handles spatial autocorrelation
+
+**Run command:**
+```bash
+uv run scripts/data_analysis/model_specification_tests.py
+```
+
+---
+
+### 9. spatial_durbin_model.py ⭐
+**Location:** `scripts/data_analysis/spatial_durbin_model.py`  
+**Purpose:** Fit Panel Spatial Durbin Model with regime-stratified analysis
+
+**Inputs:**
+- `data/panel_data_matrix_filtered_for_collinearity.parquet` (12 vars)
+- `weights/spatial_weights_knn6.gal`
+- `data/pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson`
+- `results/spatial_analysis/optionC_multivariate_clusters.csv` (5 atmospheric regimes)
+
+**Model Specification:**
+```
+log(PM10) = ρWy + Xβ + WXθ + αᵢ + γₜ + εᵢₜ
+```
+Where:
+- ρ = spatial autoregressive parameter (endogenous spillover)
+- β = direct effect coefficients (11 meteorological variables)
+- θ = indirect effect coefficients (neighbor spillover)
+- αᵢ = station fixed effects, γₜ = time fixed effects
+
+**Outputs:**
+- **Global Model:**
+  - `results/spatial_durbin_model/model_summary.txt`
+  - `results/spatial_durbin_model/coefficients_table.csv`
+  - `results/spatial_durbin_model/spillover_decomposition_observations.csv`
+
+- **Cluster-Specific Models (5 atmospheric regimes):**
+  - `results/spatial_durbin_model/cluster_0_model_summary.txt`
+  - `results/spatial_durbin_model/cluster_0_coefficients.csv`
+  - ... (repeated for clusters 1-4)
+
+- **Combined Analysis:**
+  - `results/spatial_durbin_model/regime_comparison.csv`
+  - `results/spatial_durbin_model/all_clusters_coefficients_combined.csv`
+
+- **Visualizations:**
+  - `assets/spatial_durbin_model/coefficient_forest_plot.png`
+  - `assets/spatial_durbin_model/residual_qq_plot.png`
+
+**Key Features (Updated 9 Feb 2026):**
+- Fits separate SDM models for ALL 5 atmospheric clusters
+- Tests hypothesis: global model averages over distinct physical regimes
+- Preserves temporal dynamics (no mean aggregation)
+- Comprehensive spillover decomposition: Direct (Xβ) + Indirect (WXθ) + Endogenous (ρWy)
+
+**Run command:**
+```bash
+uv run scripts/data_analysis/spatial_durbin_model.py
 ```
 
 ---
@@ -252,58 +331,132 @@ To execute the entire pipeline from scratch:
 # Navigate to project
 cd /Users/ettoremiglioranza/Projects/gar4ds
 
-# 1. Preprocessing (if needed)
+# ═══════════════════════════════════════════════════════════
+# PHASE 1: PREPROCESSING
+# ═══════════════════════════════════════════════════════════
+
+# 1. Convert raw CSV to efficient formats
 uv run scripts/preprocessing/data_preprocessing.py
 
-# 2. Build panel matrix
+# 2. Build panel matrix (20 variables)
 uv run scripts/preprocessing/build_panel_matrix.py
 
-# 3. Add elevation data
+# 3. Add elevation data (optional, for terrain analysis)
 uv run scripts/preprocessing/add_elevation_data.py
 
 # 4. Analyze multicollinearity
 uv run scripts/preprocessing/multicollinearity_analysis.py
 
-# 5. Filter dataset
+# 5. Filter dataset (12 variables)
 uv run scripts/preprocessing/filter_multicollinearity.py
 
-# 6. Exploratory analysis
+# ═══════════════════════════════════════════════════════════
+# PHASE 2: EXPLORATORY & SPATIAL ANALYSIS
+# ═══════════════════════════════════════════════════════════
+
+# 6. Exploratory data analysis
 uv run scripts/data_analysis/exploratory_data_analysis.py
 
-# 7. Spatial analysis
-uv run scripts/data_analysis/spatial_analysis_new.py
+# 7. Spatial analysis (creates spatial weights matrix)
+uv run scripts/data_analysis/spatial_analysis.py
+
+# ═══════════════════════════════════════════════════════════
+# PHASE 3: SPATIAL ECONOMETRIC MODELING
+# ═══════════════════════════════════════════════════════════
+
+# 8. Model specification tests (determines SDM is best)
+uv run scripts/data_analysis/model_specification_tests.py
+
+# 9. Spatial Durbin Model (MAIN ANALYSIS)
+uv run scripts/data_analysis/spatial_durbin_model.py
+```
+
+**Alternative: Use Makefile targets (see Makefile in project root)**
+
+```bash
+# Run entire pipeline
+make all
+
+# Or run specific phases
+make preprocessing
+make analysis
+
+# Clean outputs
+make clean-results
+make clean-all
 ```
 
 ---
 
-## Next Steps: Spatial Durbin Model
+## Pipeline Dependencies Graph
 
-After spatial analysis, you're ready to fit the SDM:
+```
+data_preprocessing.py
+    ↓ pm10_era5_land_era5_reanalysis_blh.parquet
+    ↓ pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson
+    ↓
+build_panel_matrix.py
+    ↓ panel_data_matrix.parquet (20 vars)
+    ↓
+add_elevation_data.py (optional)
+    ↓ metadata_with_elevation.geojson
+    ↓
+multicollinearity_analysis.py
+    ↓ VIF analysis, correlations, PCA
+    ↓
+filter_multicollinearity.py
+    ↓ panel_data_matrix_filtered_for_collinearity.parquet (12 vars)
+    ↓
+    ├──→ exploratory_data_analysis.py
+    │    └── EDA results, visualizations
+    │
+    └──→ spatial_analysis.py
+         ↓ spatial_weights_knn6.gal + clusters
+         ↓
+         ├──→ model_specification_tests.py
+         │    └── LRT tests, AIC/BIC comparison
+         │
+         └──→ spatial_durbin_model.py ⭐
+              └── Global SDM + 5 cluster-specific models
+                  Direct/Indirect/Endogenous spillover decomposition
+```
+
+---
+
+## Next Steps: Interactive Maps
+
+After completing the SDM analysis, you can generate interactive visualizations:
 
 **Required inputs:**
-- Panel data: `panel_data_matrix_filtered_for_collinearity.parquet`
-- Spatial weights: `weights/spatial_weights_knn6.gal`
-- Metadata: `pm10_era5_land_era5_reanalysis_blh_stations_metadata_with_elevation.geojson`
+- Spatial analysis results: `results/spatial_analysis/`
+- Model outputs: `results/spatial_durbin_model/`
+- Metadata: `pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson`
 
-**Model specification:**
-```
-PM10ᵢₜ = ρ·W·PM10 + X·β + W·X·θ + αᵢ + γₜ + εᵢₜ
+**Generate interactive maps:**
+```bash
+uv run scripts/interactive_maps/generate_all_maps.py
 ```
 
-Where X includes the 11 meteorological variables (12 total - pm10).
+**Outputs:**
+- `assets/maps/lisa_clusters_explorer.html` (spatial clusters)
+- `assets/maps/seasonal_pm10_patterns.html` (temporal patterns)
 
 ---
 
-## Pipeline Status: ✅ VERIFIED
+## Pipeline Status: ✅ COMPLETE
 
-All dependencies confirmed:
-- ✅ Data preprocessing complete
-- ✅ Panel matrix built (20 vars)
-- ✅ Elevation data added
-- ✅ Multicollinearity analyzed
-- ✅ Dataset filtered (12 vars)
-- ✅ EDA validated physical relationships
-- ✅ Spatial analysis complete, weights generated
-- 🎯 **Ready for Spatial Durbin Model**
+All pipeline stages verified:
+- ✅ Phase 1: Data preprocessing complete (5 scripts)
+- ✅ Phase 2: Exploratory & spatial analysis complete (2 scripts)
+- ✅ Phase 3: Spatial econometric modeling complete (2 scripts)
+- ✅ Interactive maps generated
+- 🎯 **Analysis pipeline fully operational**
 
-Last verified: 2026-02-06
+**Total Outputs:**
+- 14 result files from global SDM
+- 10 result files from cluster-specific SDMs (5 clusters × 2 files)
+- 2 combined analysis files
+- 2 visualization files (plots)
+- 2 interactive HTML maps
+
+Last updated: **9 February 2026**

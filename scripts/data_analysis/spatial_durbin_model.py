@@ -12,7 +12,7 @@ METHODOLOGY:
 4. Create spatially lagged features (WX matrix) - Manual Durbin construction
 5. Fit Panel Fixed Effects Spatial Lag Model (spreg.Panel_FE_Lag)
 6. Decompose spillover: Local (Xβ) + Neighbor (WXθ) + Endogenous (ρWy)
-7. Regime-stratified analysis (Stagnation vs. Transport Corridor)
+7. Regime-stratified analysis for ALL 5 atmospheric clusters
 8. Generate comprehensive diagnostics and visualizations
 
 MODEL SPECIFICATION (SDM):
@@ -30,10 +30,19 @@ Where:
 OUTPUTS:
 - Text log: results/spatial_durbin_model/sdm_analysis_log.txt
 - CSV results: results/spatial_durbin_model/
-- Visualizations: assets/spatial_durbin_model/
+  * Global model: model_summary.txt, coefficients_table.csv
+  * Cluster-specific: cluster_N_model_summary.txt, cluster_N_coefficients.csv (N=0-4)
+  * Combined: all_clusters_coefficients_combined.csv, regime_comparison.csv
+- Visualizations: assets/spatial_durbin_model/ (coefficient forest plot, Q-Q plot)
+
+CHANGES (9 Feb 2026):
+- Removed mean-aggregated station-level summaries (preserves temporal dynamics)
+- Enhanced regime-stratified analysis to fit models for ALL 5 atmospheric clusters
+- Removed spillover decomposition map and top10 bar chart (relied on aggregation)
+- Added per-cluster model outputs and combined coefficient tables
 
 Author: Ettore Miglioranza
-Date: 6 February 2026
+Date: 9 February 2026
 """
 
 import pandas as pd
@@ -503,50 +512,45 @@ def decompose_spillover(model, panel_filtered, met_vars, lagged_vars):
     return decomp_df
 
 
-def aggregate_to_station_level(decomp_df):
-    """Aggregate spillover decomposition to station level"""
-    print_header("12. AGGREGATING TO STATION LEVEL")
-    
-    # Group by station_id (second level of MultiIndex)
-    station_summary = decomp_df.groupby(level='station_id').agg({
-        'log_pm10': 'mean',
-        'pm10': 'mean',
-        'direct_local': 'mean',
-        'indirect_neighbor': 'mean',
-        'endogenous_spillover': 'mean',
-        'predicted_log_pm10': 'mean',
-        'residual': 'mean'
-    }).reset_index()
-    
-    # Add percentage contributions
-    station_summary['pct_direct'] = (station_summary['direct_local'] / 
-                                     station_summary['predicted_log_pm10'] * 100)
-    station_summary['pct_indirect'] = (station_summary['indirect_neighbor'] / 
-                                       station_summary['predicted_log_pm10'] * 100)
-    station_summary['pct_endogenous'] = (station_summary['endogenous_spillover'] / 
-                                         station_summary['predicted_log_pm10'] * 100)
-    
-    print(f"    ✓ Aggregated {len(station_summary)} stations")
-    print("\n    Summary Statistics:")
-    print(f"        Direct Effect:      mean={station_summary['direct_local'].mean():.4f}, std={station_summary['direct_local'].std():.4f}")
-    print(f"        Indirect Effect:    mean={station_summary['indirect_neighbor'].mean():.4f}, std={station_summary['indirect_neighbor'].std():.4f}")
-    print(f"        Endogenous Effect:  mean={station_summary['endogenous_spillover'].mean():.4f}, std={station_summary['endogenous_spillover'].std():.4f}")
-    
-    return station_summary
-
-
 def fit_regime_stratified_models(panel_df, clusters, met_vars, lagged_vars, w, common_stations):
     """
-    Fit separate SDM models for different atmospheric regimes
-    Focus on Cluster 0 (Stagnation) vs. Cluster 2 (Transport Corridor)
+    Fit separate SDM models for ALL atmospheric regimes (5 clusters)
+    
+    HYPOTHESIS TEST:
+    Does the global model average over distinct physical regimes, causing:
+    - Counterintuitive coefficient signs (e.g., positive BLH)
+    - Opposing direct/indirect effects
+    - Physical incoherence between source and transport regions?
+    
+    EXPECTED PATTERNS BY REGIME:
+    
+    Cluster 0 (Po Valley Stagnation):
+    - BLH: Expected NEGATIVE (dilution works locally without transport)
+    - Temperature/Solar: Strongly NEGATIVE (convection is only escape mechanism)
+    - Winds: Less important (stagnant conditions)
+    - ρ: HIGH (stations share same stagnant air mass - synchronous)
+    
+    Cluster 2 (Trentino Transport Corridor):
+    - V850: Strongly NEGATIVE (southerly transport from Po Valley main driver)
+    - BLH: Effects may differ (entrainment from transport layers)
+    - Regional effects (θ): Possibly STRONGER (spatial spillovers dominate)
+    - ρ: LOWER than Cluster 0 (transport is directional, not simultaneous)
+    
+    Other Clusters (1, 3, 4):
+    - Intermediate or distinct meteorological regimes
+    - Test if parameters show regime-specific coherence
     """
-    print_header("13. REGIME-STRATIFIED ANALYSIS")
-    print("    Comparing: Cluster 0 (Stagnation) vs. Cluster 2 (Transport Corridor)")
+    print_header("13. REGIME-STRATIFIED ANALYSIS - ALL CLUSTERS")
+    print("    Fitting separate SDM models for each atmospheric cluster")
+    print("    Testing hypothesis: Global model averages over distinct physical regimes\n")
     
     regime_results = {}
     
-    for cluster_id in [0, 2]:
-        print(f"\n    --- Cluster {cluster_id} ---")
+    # Loop through ALL 5 clusters (0, 1, 2, 3, 4)
+    for cluster_id in range(5):
+        print(f"\n    {'='*60}")
+        print(f"    CLUSTER {cluster_id}")
+        print(f"    {'='*60}")
         
         # Get stations in this cluster
         cluster_stations = clusters[clusters['Cluster'] == cluster_id]['Station'].values
@@ -602,29 +606,60 @@ def fit_regime_stratified_models(panel_df, clusters, met_vars, lagged_vars, w, c
             print(f"    ✓ Model fit successful")
             print(f"    ✓ ρ (Cluster {cluster_id}) = {model_cluster.rho:.6f}")
             
+            # Extract full coefficient table
+            coef_cluster = extract_coefficients(model_cluster, met_vars, lagged_vars)
+            
             regime_results[cluster_id] = {
                 'model': model_cluster,
                 'rho': model_cluster.rho,
                 'n_obs': len(panel_cluster),
-                'n_stations': len(cluster_stations_in_w)
+                'n_stations': len(cluster_stations_in_w),
+                'stations': cluster_stations_in_w,
+                'coefficients': coef_cluster
             }
             
+            # Save model summary to separate file for each cluster
+            cluster_summary_path = RESULTS_DIR / f'cluster_{cluster_id}_model_summary.txt'
+            save_model_summary(model_cluster, cluster_summary_path)
+            print(f"    ✓ Saved model summary: cluster_{cluster_id}_model_summary.txt")
+            
+            # Save coefficient table for each cluster
+            coef_cluster.to_csv(
+                RESULTS_DIR / f'cluster_{cluster_id}_coefficients.csv',
+                index=False
+            )
+            print(f"    ✓ Saved coefficients: cluster_{cluster_id}_coefficients.csv")
+            
         except Exception as e:
-            print(f"    ✗ Error: {e}")
+            print(f"    ✗ Error fitting model: {e}")
             continue
     
-    # Compare rho values
-    if 0 in regime_results and 2 in regime_results:
-        print("\n    Regime Comparison:")
-        print(f"        ρ (Stagnation, Cluster 0):  {regime_results[0]['rho']:.6f}")
-        print(f"        ρ (Transport, Cluster 2):   {regime_results[2]['rho']:.6f}")
-        difference = regime_results[2]['rho'] - regime_results[0]['rho']
-        print(f"        Difference (Transport - Stagnation): {difference:.6f}")
+    # Comprehensive regime comparison table
+    print(f"\n    {'='*60}")
+    print("    REGIME COMPARISON SUMMARY")
+    print(f"    {'='*60}\n")
+    
+    if len(regime_results) > 0:
+        comparison_rows = []
+        for cluster_id in sorted(regime_results.keys()):
+            res = regime_results[cluster_id]
+            comparison_rows.append({
+                'cluster_id': cluster_id,
+                'rho': res['rho'],
+                'n_stations': res['n_stations'],
+                'n_obs': res['n_obs']
+            })
         
-        if difference > 0:
-            print("        → Transport corridors show STRONGER spillover ✓")
-        else:
-            print("        → Stagnation zones show STRONGER spillover (unexpected)")
+        comparison_df = pd.DataFrame(comparison_rows)
+        print(comparison_df.to_string(index=False))
+        print()
+        
+        # Print interpretation guidance
+        print("    INTERPRETATION NOTES:")
+        print("    - High ρ suggests synchronous spatial correlation")
+        print("    - Low ρ may indicate directional transport (not simultaneous)")
+        print("    - Compare coefficient signs across clusters for physical coherence")
+        print("    - Check if global model sign conflicts resolve in cluster-specific models")
     
     return regime_results
 
@@ -671,41 +706,15 @@ def compute_residual_diagnostics(model, decomp_df, w):
         return None
 
 
-def create_visualizations(decomp_df, station_summary, coef_df, meta_df, residual_diag):
-    """Generate comprehensive visualizations"""
+def create_visualizations(decomp_df, coef_df, meta_df, residual_diag):
+    """Generate visualizations (UPDATED - removed station_summary)"""
     print_header("15. GENERATING VISUALIZATIONS")
     
     # Set style
     sns.set_style('whitegrid')
     plt.rcParams['figure.facecolor'] = 'white'
     
-    # 1. Spillover Decomposition Map
-    print("    Creating spillover spatial map...")
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-    
-    # Merge with metadata for coordinates
-    map_data = station_summary.merge(meta_df, left_on='station_id', right_index=True)
-    
-    for i, (component, title) in enumerate([
-        ('direct_local', 'Direct Local Effect (Xβ)'),
-        ('indirect_neighbor', 'Indirect Neighbor Effect (WXθ)'),
-        ('endogenous_spillover', 'Endogenous Spillover (ρWy)')
-    ]):
-        ax = axes[i]
-        scatter = ax.scatter(map_data['Longitude'], map_data['Latitude'],
-                           c=map_data[component], s=100, cmap='RdYlBu_r',
-                           edgecolors='black', linewidths=0.5)
-        ax.set_title(title, fontsize=12, fontweight='bold')
-        ax.set_xlabel('Longitude')
-        ax.set_ylabel('Latitude')
-        plt.colorbar(scatter, ax=ax, label='Effect Magnitude')
-    
-    plt.tight_layout()
-    plt.savefig(ASSETS_DIR / 'spillover_decomposition_map.png', dpi=300, bbox_inches='tight')
-    plt.close()
-    print(f"    ✓ Saved: spillover_decomposition_map.png")
-    
-    # 2. Coefficient Forest Plot
+    # 1. Coefficient Forest Plot
     print("    Creating coefficient forest plot...")
     coef_plot = coef_df[coef_df['variable'] != 'W_log_pm10'].copy()
     
@@ -753,77 +762,51 @@ def create_visualizations(decomp_df, station_summary, coef_df, meta_df, residual
     plt.close()
     print(f"    ✓ Saved: residual_qq_plot.png")
     
-    # 4. Station-level decomposition (top 10 by PM10)
-    print("    Creating station spillover decomposition...")
-    top_stations = station_summary.nlargest(10, 'pm10')
-    
-    fig, ax = plt.subplots(figsize=(12, 6))
-    
-    x = np.arange(len(top_stations))
-    width = 0.25
-    
-    ax.bar(x - width, top_stations['direct_local'], width, label='Direct Local', color='steelblue', alpha=0.8)
-    ax.bar(x, top_stations['indirect_neighbor'], width, label='Indirect Neighbor', color='coral', alpha=0.8)
-    ax.bar(x + width, top_stations['endogenous_spillover'], width, label='Endogenous Spillover', color='seagreen', alpha=0.8)
-    
-    ax.set_xlabel('Station', fontsize=11)
-    ax.set_ylabel('Effect Magnitude (log scale)', fontsize=11)
-    ax.set_title('Spillover Decomposition: Top 10 Polluted Stations', fontsize=12, fontweight='bold')
-    ax.set_xticks(x)
-    ax.set_xticklabels(top_stations['station_id'], rotation=45, ha='right', fontsize=9)
-    ax.legend()
-    ax.grid(axis='y', alpha=0.3)
-    
-    plt.tight_layout()
-    plt.savefig(ASSETS_DIR / 'station_spillover_decomposition_top10.png', dpi=300, bbox_inches='tight')
-    plt.close()
-    print(f"    ✓ Saved: station_spillover_decomposition_top10.png")
-    
     print("\n    ✓ All visualizations complete!")
 
 
-def save_results(decomp_df, station_summary, coef_df, regime_results):
-    """Save all results to CSV files"""
+def save_results(decomp_df, coef_df, regime_results):
+    """Save all analysis results (UPDATED - removed station_summary)"""
     print_header("16. SAVING RESULTS")
     
-    # 1. Observation-level decomposition (sample to avoid huge file)
-    print("    Saving observation-level decomposition (sample)...")
-    decomp_sample = decomp_df.sample(n=min(10000, len(decomp_df)), random_state=42)
-    decomp_sample.to_csv(RESULTS_DIR / 'spillover_decomposition_observation_sample.csv')
-    print(f"    ✓ spillover_decomposition_observation_sample.csv ({len(decomp_sample)} rows)")
+    # 1. Spillover decomposition (observation-level, not aggregated)
+    decomp_df.to_csv(RESULTS_DIR / 'spillover_decomposition_observations.csv')
+    print(f"    ✓ spillover_decomposition_observations.csv ({len(decomp_df)} obs)")
     
-    # 2. Station-level aggregation
-    print("    Saving station-level aggregation...")
-    station_summary.to_csv(RESULTS_DIR / 'spillover_decomposition_stations.csv', index=False)
-    print(f"    ✓ spillover_decomposition_stations.csv ({len(station_summary)} rows)")
-    
-    # 3. Coefficients table
-    print("    Saving coefficients table...")
+    # 2. Model coefficients (global model)
     coef_df.to_csv(RESULTS_DIR / 'coefficients_table.csv', index=False)
     print(f"    ✓ coefficients_table.csv ({len(coef_df)} rows)")
     
-    # 4. Regime comparison
+    # 3. ENHANCED: Regime comparison with all details
     if regime_results:
-        print("    Saving regime comparison...")
-        regime_df = pd.DataFrame([
+        # Basic comparison table
+        regime_comparison = pd.DataFrame([
             {
-                'cluster': cluster_id,
+                'cluster_id': cluster_id,
                 'rho': results['rho'],
-                'n_observations': results['n_obs'],
-                'n_stations': results['n_stations']
+                'n_stations': results['n_stations'],
+                'n_obs': results['n_obs']
             }
             for cluster_id, results in regime_results.items()
         ])
-        regime_df.to_csv(RESULTS_DIR / 'regime_comparison.csv', index=False)
-        print(f"    ✓ regime_comparison.csv ({len(regime_df)} rows)")
-    
-    # 5. Target stations (Trentino focus)
-    print("    Extracting Trentino target stations...")
-    trentino_targets = ['502604', '502608', '502609', '502612']  # Example codes
-    target_summary = station_summary[station_summary['station_id'].isin(trentino_targets)]
-    if len(target_summary) > 0:
-        target_summary.to_csv(RESULTS_DIR / 'target_stations_spillover.csv', index=False)
-        print(f"    ✓ target_stations_spillover.csv ({len(target_summary)} rows)")
+        regime_comparison.to_csv(RESULTS_DIR / 'regime_comparison.csv', index=False)
+        print(f"    ✓ regime_comparison.csv ({len(regime_comparison)} rows)")
+        
+        # NEW: Combined coefficients table for all clusters
+        all_cluster_coefs = []
+        for cluster_id, results in regime_results.items():
+            coefs = results['coefficients'].copy()
+            coefs['cluster_id'] = cluster_id
+            all_cluster_coefs.append(coefs)
+        
+        if all_cluster_coefs:
+            combined_coefs = pd.concat(all_cluster_coefs, ignore_index=True)
+            combined_coefs.to_csv(
+                RESULTS_DIR / 'all_clusters_coefficients_combined.csv',
+                index=False
+            )
+            print(f"    ✓ all_clusters_coefficients_combined.csv ({len(combined_coefs)} rows)")
+            print(f"        Contains coefficients for {len(regime_results)} cluster-specific models")
     
     print("\n    ✓ All results saved!")
 
@@ -886,20 +869,17 @@ def main():
         # 11. Decompose spillover
         decomp_df = decompose_spillover(model, panel_filtered, met_vars, lagged_vars)
         
-        # 12. Aggregate to station level
-        station_summary = aggregate_to_station_level(decomp_df)
-        
-        # 13. Regime-stratified analysis
+        # 12. Regime-stratified analysis (ALL 5 clusters)
         regime_results = fit_regime_stratified_models(panel_df, clusters, met_vars, lagged_vars, w, common_stations)
         
-        # 14. Residual diagnostics
+        # 13. Residual diagnostics
         residual_diag = compute_residual_diagnostics(model, decomp_df, w)
         
-        # 15. Create visualizations
-        create_visualizations(decomp_df, station_summary, coef_df, meta_df, residual_diag)
+        # 14. Create visualizations
+        create_visualizations(decomp_df, coef_df, meta_df, residual_diag)
         
-        # 16. Save results
-        save_results(decomp_df, station_summary, coef_df, regime_results)
+        # 15. Save results
+        save_results(decomp_df, coef_df, regime_results)
         
         # Final summary
         print_header("ANALYSIS COMPLETE", level=1)

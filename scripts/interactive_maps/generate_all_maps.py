@@ -7,15 +7,13 @@ Po Valley - Alpine Region PM10 pollution analysis project.
 
 MAPS GENERATED:
 1. LISA Spatial Clusters Explorer - Spatial autocorrelation visualization
-2. PM10 & Meteorological Explorer - Pollution levels with wind patterns
-3. Seasonal PM10 Patterns - Temporal/seasonal analysis
+2. Seasonal PM10 Patterns - Temporal/seasonal analysis
 
 USAGE:
     uv run scripts/interactive_maps/generate_all_maps.py
 
 OUTPUT:
     assets/maps/lisa_clusters_explorer.html
-    assets/maps/pm10_meteorological_explorer.html
     assets/maps/seasonal_pm10_patterns.html
 """
 
@@ -42,7 +40,7 @@ def main():
     
     # 1. LISA Clusters Map
     print("\n" + "-" * 80)
-    print("  [1/3] LISA Spatial Clusters Map")
+    print("  [1/2] LISA Spatial Clusters Map")
     print("-" * 80)
     try:
         path = generate_lisa_map()
@@ -50,9 +48,9 @@ def main():
     except Exception as e:
         print(f"    ✗ Error: {e}")
     
-    # 3. Seasonal Patterns Map
+    # 2. Seasonal Patterns Map
     print("\n" + "-" * 80)
-    print("  [3/3] Seasonal PM10 Patterns Map")
+    print("  [2/2] Seasonal PM10 Patterns Map")
     print("-" * 80)
     try:
         path = generate_seasonal_map()
