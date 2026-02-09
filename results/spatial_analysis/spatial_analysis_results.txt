@@ -1,7 +1,7 @@
 ================================================================================
 SPATIAL ANALYSIS - PANEL DATA REFACTORED VERSION
 ================================================================================
-Analysis Date: 2026-02-06 11:30:44.835455
+Analysis Date: 2026-02-09 16:54:27.604172
 
 Outputs:
     Text Log: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_analysis/spatial_analysis_results.txt
@@ -110,91 +110,91 @@ total_precipitation            24.145177      3.805680      16.029446      31.49
     --- pm10 ---
         Moran's I: 0.6813
         P-value: 0.0010
-        Z-score: 9.0112
+        Z-score: 8.5741
         Pattern: Clustered **
 
     --- temperature_2m ---
         Moran's I: 0.5503
         P-value: 0.0010
-        Z-score: 7.1474
+        Z-score: 7.3395
         Pattern: Clustered **
 
     --- humidity_950 ---
         Moran's I: 0.3240
-        P-value: 0.0010
-        Z-score: 4.4589
+        P-value: 0.0030
+        Z-score: 4.2367
         Pattern: Clustered **
 
     --- blh ---
         Moran's I: 0.4856
         P-value: 0.0010
-        Z-score: 6.5017
+        Z-score: 6.3019
         Pattern: Clustered **
 
     --- solar_radiation_downwards ---
         Moran's I: 0.3067
-        P-value: 0.0010
-        Z-score: 4.4053
+        P-value: 0.0020
+        Z-score: 4.1448
         Pattern: Clustered **
 
     --- wind_u_10m ---
         Moran's I: 0.5073
         P-value: 0.0010
-        Z-score: 7.5799
+        Z-score: 7.2350
         Pattern: Clustered **
 
     --- wind_v_10m ---
         Moran's I: 0.6726
         P-value: 0.0010
-        Z-score: 8.3684
+        Z-score: 9.0545
         Pattern: Clustered **
 
     --- uwind_850 ---
         Moran's I: 0.6067
         P-value: 0.0010
-        Z-score: 8.1363
+        Z-score: 7.6739
         Pattern: Clustered **
 
     --- uwind_950 ---
         Moran's I: 0.6895
         P-value: 0.0010
-        Z-score: 8.8941
+        Z-score: 9.4326
         Pattern: Clustered **
 
     --- Vwind_850 ---
         Moran's I: 0.4241
         P-value: 0.0010
-        Z-score: 5.5373
+        Z-score: 6.0726
         Pattern: Clustered **
 
     --- Vwind_950 ---
         Moran's I: 0.3215
-        P-value: 0.0010
-        Z-score: 4.3507
+        P-value: 0.0030
+        Z-score: 4.5451
         Pattern: Clustered **
 
     --- total_precipitation ---
         Moran's I: 0.3018
-        P-value: 0.0010
-        Z-score: 4.1681
+        P-value: 0.0050
+        Z-score: 4.0333
         Pattern: Clustered **
 
 ================================================================================
 GLOBAL MORAN'S I SUMMARY
 ================================================================================
                  Variable  Morans_I  Expected_I  Variance_I  Z_score  P_value Significant   Pattern
-                     pm10  0.681338   -0.027778    0.006185 9.011223    0.001         Yes Clustered
-           temperature_2m  0.550323   -0.027778    0.006533 7.147391    0.001         Yes Clustered
-             humidity_950  0.324012   -0.027778    0.006261 4.458892    0.001         Yes Clustered
-                      blh  0.485592   -0.027778    0.006234 6.501710    0.001         Yes Clustered
-solar_radiation_downwards  0.306657   -0.027778    0.005808 4.405332    0.001         Yes Clustered
-               wind_u_10m  0.507317   -0.027778    0.004979 7.579898    0.001         Yes Clustered
-               wind_v_10m  0.672601   -0.027778    0.006972 8.368351    0.001         Yes Clustered
-                uwind_850  0.606739   -0.027778    0.006097 8.136324    0.001         Yes Clustered
-                uwind_950  0.689518   -0.027778    0.006602 8.894096    0.001         Yes Clustered
-                Vwind_850  0.424080   -0.027778    0.006698 5.537291    0.001         Yes Clustered
-                Vwind_950  0.321550   -0.027778    0.006337 4.350746    0.001         Yes Clustered
-      total_precipitation  0.301814   -0.027778    0.006219 4.168128    0.001         Yes Clustered
+                     pm10  0.681338   -0.027778    0.006770 8.574148    0.001         Yes Clustered
+           temperature_2m  0.550323   -0.027778    0.006169 7.339521    0.001         Yes Clustered
+             humidity_950  0.324012   -0.027778    0.006802 4.236695    0.003         Yes Clustered
+                      blh  0.485592   -0.027778    0.006601 6.301937    0.001         Yes Clustered
+solar_radiation_downwards  0.306657   -0.027778    0.006416 4.144839    0.002         Yes Clustered
+               wind_u_10m  0.507317   -0.027778    0.005466 7.234950    0.001         Yes Clustered
+               wind_v_10m  0.672601   -0.027778    0.006026 9.054479    0.001         Yes Clustered
+                uwind_850  0.606739   -0.027778    0.006777 7.673857    0.001         Yes Clustered
+                uwind_950  0.689518   -0.027778    0.005764 9.432613    0.001         Yes Clustered
+                Vwind_850  0.424080   -0.027778    0.005608 6.072624    0.001         Yes Clustered
+                Vwind_950  0.321550   -0.027778    0.005902 4.545129    0.003         Yes Clustered
+      total_precipitation  0.301814   -0.027778    0.006642 4.033257    0.005         Yes Clustered
 
 [8] CALCULATING LOCAL MORAN'S I (LISA)
 ================================================================================
@@ -206,11 +206,11 @@ solar_radiation_downwards  0.306657   -0.027778    0.005808 4.405332    0.001   
         Low-High: Low values surrounded by high values (spatial outliers)
 
     --- pm10 ---
-        High-High (hotspots): 8
+        High-High (hotspots): 10
         Low-Low (coldspots): 16
         High-Low (outliers): 0
         Low-High (outliers): 2
-        Not significant: 11
+        Not significant: 9
 
     --- temperature_2m ---
         High-High (hotspots): 5
@@ -228,10 +228,10 @@ solar_radiation_downwards  0.306657   -0.027778    0.005808 4.405332    0.001   
 
     --- blh ---
         High-High (hotspots): 7
-        Low-Low (coldspots): 9
+        Low-Low (coldspots): 10
         High-Low (outliers): 0
         Low-High (outliers): 1
-        Not significant: 20
+        Not significant: 19
 
     --- solar_radiation_downwards ---
         High-High (hotspots): 3
@@ -279,8 +279,8 @@ solar_radiation_downwards  0.306657   -0.027778    0.005808 4.405332    0.001   
         High-High (hotspots): 5
         Low-Low (coldspots): 4
         High-Low (outliers): 0
-        Low-High (outliers): 1
-        Not significant: 27
+        Low-High (outliers): 0
+        Not significant: 28
 
     --- total_precipitation ---
         High-High (hotspots): 6
@@ -378,8 +378,8 @@ ANALYSIS COMPLETE
     • Variables with significant spatial autocorrelation: 12
         ['pm10', 'temperature_2m', 'humidity_950', 'blh', 'solar_radiation_downwards', 'wind_u_10m', 'wind_v_10m', 'uwind_850', 'uwind_950', 'Vwind_850', 'Vwind_950', 'total_precipitation']
 
-    • PM10 hotspots identified: 8
-        ['502609', '502701', 'ARPAL_002', 'ARPAL_005', 'ARPAL_007', 'ARPAL_020', 'ARPAL_022', 'ARPAL_028']
+    • PM10 hotspots identified: 10
+        ['502608', '502609', '502701', 'ARPAL_002', 'ARPAL_005', 'ARPAL_007', 'ARPAL_019', 'ARPAL_020', 'ARPAL_022', 'ARPAL_028']
 
     • Atmospheric regimes (clusters): 5
 

@@ -3,7 +3,7 @@
   EXPLORATORY DATA ANALYSIS (EDA)
 ================================================================================
 
-Execution Time: 2026-02-06 10:07:36
+Execution Time: 2026-02-09 16:54:25
 Purpose: Verify physical relationships before regression modeling
 Output Directory: /Users/ettoremiglioranza/Projects/gar4ds/results/eda_analysis
 

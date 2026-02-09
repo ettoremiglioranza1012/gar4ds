@@ -1,0 +1,232 @@
+
+================================================================================
+  PANEL MATRIX BUILDER
+================================================================================
+
+Execution Time: 2026-02-09 16:53:40
+Base Directory: /Users/ettoremiglioranza/Projects/gar4ds
+Data Directory: /Users/ettoremiglioranza/Projects/gar4ds/data
+Results Directory: /Users/ettoremiglioranza/Projects/gar4ds/results/dataset_documentation
+
+================================================================================
+  TRANSFORMATION PIPELINE
+================================================================================
+
+
+--- Loading Source Dataset ---
+
+Reading: pm10_era5_land_era5_reanalysis_blh.parquet
+  Shape: 96,432 rows × 741 columns
+  Memory: 545.17 MB
+  Date Range: 2014-01-01 00:00:00 to 2024-12-31 23:00:00
+
+--- Step 1: Parsing Column Headers ---
+
+Total columns to parse: 740
+  Variables identified: 20
+  Stations identified: 37
+
+Variable types found:
+  Vwind_550, Vwind_850, Vwind_950, blh, humidity_550
+  humidity_850, humidity_950, pm10, solar_radiation_downwards, surface_pressure
+  temperature_2m, temperature_550, temperature_850, temperature_950, total_precipitation
+  uwind_550, uwind_850, uwind_950, wind_u_10m, wind_v_10m
+
+Station IDs found (37):
+  402201, 402203, 402204, 402206, 402209, 402211, 402212, 402213, 502604, 502608, 502609, 502612, 502701, 502720, AB2, ARPAL_001, ARPAL_002, ARPAL_005, ARPAL_007, ARPAL_008, ARPAL_011, ARPAL_012, ARPAL_017, ARPAL_019, ARPAL_020, ARPAL_022, ARPAL_023, ARPAL_026, ARPAL_027, ARPAL_028, BR1, BX1, BZ4, BZ5, LA1, LS1, ME1
+
+--- Step 2: Reshaping to Long Format ---
+
+⚠ DISRUPTIVE OPERATION: Transforming Wide → Long format
+  Original shape: (96432, 741)
+
+Melting dataframe...
+  Long format shape: (71359680, 3)
+  Memory usage: 6388.97 MB
+
+Extracting variable and station_id...
+✓ Long format created: (71359680, 4)
+  Columns: ['datetime', 'value', 'variable', 'station_id']
+
+--- Step 3: Pivoting Variables to Columns ---
+
+⚠ DISRUPTIVE OPERATION: Pivoting variables into separate columns
+Pivoting on variable column...
+  Using efficient pivot operation...
+✓ Pivoted shape: (3567984, 22)
+  Variables as columns: 20
+  Sample columns: ['datetime', 'station_id', 'Vwind_550', 'Vwind_850', 'Vwind_950', 'blh', 'humidity_550', 'humidity_850', 'humidity_950', 'pm10']
+
+--- Step 4: Aggregating to Weekly Frequency ---
+
+⚠ DISRUPTIVE OPERATION: Temporal aggregation (Hourly → Weekly)
+Original temporal resolution: Hourly
+Original observations: 3,567,984
+Original date range: 2014-01-01 00:00:00 to 2024-12-31 23:00:00
+
+Resampling to weekly frequency (Week start = Monday)...
+  Using MEAN for most variables (temperature, wind, etc.)
+  Using SUM for precipitation (accumulation over week)
+  Precipitation columns using SUM: 1
+  Other columns using MEAN: 19
+✓ Weekly aggregation complete
+  New shape: (21275, 22)
+  New observations: 21,275
+  Weeks covered: 575
+  Date range: 2014-01-06 00:00:00 to 2025-01-06 00:00:00
+
+Aggregation statistics:
+  Original hourly records: 3,567,984
+  Weekly aggregated records: 21,275
+  Data reduction: 99.4%
+  Average hours per weekly record: 167.7
+
+⚠ UNIT CONVERSION: Converting precipitation from meters to mm
+  total_precipitation: m → mm
+
+Precipitation statistics (after conversion to mm):
+  total_precipitation:
+    Mean (all weeks): 24.145 mm
+    Mean (rainy weeks): 24.171 mm
+    Max: 270.876 mm
+
+--- Step 5: Creating Panel Multi-Index Structure ---
+
+⚠ DISRUPTIVE OPERATION: Creating Multi-Index [week_start, station_id]
+Sorting by timestamp and station_id...
+Setting Multi-Index...
+✓ Panel structure created
+  Index: ['week_start', 'station_id']
+  Shape: (21275, 20)
+  Weeks: 575
+  Stations: 37
+
+================================================================================
+  PANEL MATRIX ANALYSIS
+================================================================================
+
+
+--- 1. Panel Structure ---
+
+Dimensions: 21,275 observations × 20 variables
+Index Type: MultiIndex
+Index Levels: ['week_start', 'station_id']
+
+Temporal Coverage:
+  Start Date: 2014-01-06 00:00:00
+  End Date: 2025-01-06 00:00:00
+  Total Weeks: 575
+  Duration: 4018 days (574.0 weeks)
+
+Entity Coverage:
+  Total Stations: 37
+  Station IDs: 402201, 402203, 402204, 402206, 402209, 402211, 402212, 402213, 502604, 502608, 502609, 502612, 502701, 502720, AB2, ARPAL_001, ARPAL_002, ARPAL_005, ARPAL_007, ARPAL_008, ARPAL_011, ARPAL_012, ARPAL_017, ARPAL_019, ARPAL_020, ARPAL_022, ARPAL_023, ARPAL_026, ARPAL_027, ARPAL_028, BR1, BX1, BZ4, BZ5, LA1, LS1, ME1
+
+--- 2. Variable Summary ---
+
+Total Variables: 20
+
+Variables in panel:
+  Vwind_550                               : 21,275 non-null (100.0%)
+  Vwind_850                               : 21,275 non-null (100.0%)
+  Vwind_950                               : 21,275 non-null (100.0%)
+  blh                                     : 21,275 non-null (100.0%)
+  humidity_550                            : 21,275 non-null (100.0%)
+  humidity_850                            : 21,275 non-null (100.0%)
+  humidity_950                            : 21,275 non-null (100.0%)
+  pm10                                    : 21,275 non-null (100.0%)
+  solar_radiation_downwards               : 21,275 non-null (100.0%)
+  surface_pressure                        : 21,275 non-null (100.0%)
+  temperature_2m                          : 21,275 non-null (100.0%)
+  temperature_550                         : 21,275 non-null (100.0%)
+  temperature_850                         : 21,275 non-null (100.0%)
+  temperature_950                         : 21,275 non-null (100.0%)
+  total_precipitation                     : 21,275 non-null (100.0%)
+  uwind_550                               : 21,275 non-null (100.0%)
+  uwind_850                               : 21,275 non-null (100.0%)
+  uwind_950                               : 21,275 non-null (100.0%)
+  wind_u_10m                              : 21,275 non-null (100.0%)
+  wind_v_10m                              : 21,275 non-null (100.0%)
+
+--- 3. Panel Balance ---
+
+Panel Type: Balanced
+  Min observations per station: 575
+  Max observations per station: 575
+  Mean observations per station: 575.0
+
+--- 4. Data Quality ---
+
+✓ No missing values in panel matrix
+
+--- 5. Sample Preview ---
+
+First 10 rows of panel matrix:
+variable               Vwind_550  Vwind_850  Vwind_950        blh  humidity_550  humidity_850  humidity_950       pm10  solar_radiation_downwards  surface_pressure  temperature_2m  temperature_550  temperature_850  temperature_950  total_precipitation  uwind_550  uwind_850  uwind_950  wind_u_10m  wind_v_10m
+week_start station_id                                                                                                                                                                                                                                                                                               
+2014-01-06 402201       5.034460   0.854819  -0.195887  50.480667     55.362508     81.111457     89.713696  32.756944              132591.083333      86176.969076      271.264156       257.534997       273.484485       278.403717            61.279057  10.724955  -0.348663  -0.519504   -0.377807   -0.362027
+           402203       5.410592  -0.001290  -0.622764  35.846770     58.838616     74.598904     80.022306   2.812500              149534.166667      88401.121854      270.324364       257.557628       273.356533       278.912482            58.938159  10.826330   0.861766   0.614239    0.428370   -0.355493
+           402204       4.898405   0.681923  -0.705827  64.633988     57.054687     77.618657     82.181619  17.395833              142430.250000      92981.802410      273.501189       257.597017       273.972555       278.832717            65.266801  10.475942   1.147035   0.146424    0.322290   -0.664700
+           402206       4.787762   1.239597  -0.501578  69.750090     56.029317     79.200529     84.712643  17.229167              139634.861111      92317.045465      273.681962       257.592194       274.116781       278.484653            61.325921  10.312457   0.935610  -0.075356    0.185253   -0.479116
+           402209       5.249086   0.861758  -0.178900  44.717321     56.605172     75.320157     84.170104  19.888889              144874.416667      90533.913521      271.678273       257.537425       273.489410       278.376305            56.680425  10.672564   0.378988   0.113974    0.065861   -0.227420
+           402211       5.249086   0.861758  -0.178900  44.717321     56.605172     75.320157     84.170104  24.291667              144874.416667      90533.913521      271.678273       257.537425       273.489410       278.376305            56.680425  10.672564   0.378988   0.113974    0.065861   -0.227420
+           402212       5.605407   0.844544  -0.243267  39.507034     55.848497     73.471998     79.296778  18.062500              147405.777778      89430.080188      270.581199       257.496749       273.242516       278.279966            55.344677  10.966666   0.272642   0.344636    0.098685   -0.150587
+           402213       4.898405   0.681923  -0.705827  64.633988     57.054687     77.618657     82.181619  16.104167              123357.361111      89606.476021      274.543045       257.597017       273.972555       278.832717            66.332577  10.475942   1.147035   0.146424   -0.073414   -0.764584
+           502604       4.185720   4.110739   0.234478  95.297834     52.796301     89.237877     80.704683  30.604167              110142.388889      99174.087132      278.371767       257.538786       274.766492       278.879444            70.386788   9.789812   3.653109  -0.965221   -0.154757   -0.834229
+           502608       4.185720   4.110739   0.234478  95.297834     52.796301     89.237877     80.704683  51.024306              112320.000000     100586.149632      278.673525       257.538786       274.766492       278.879444            65.552389   9.789812   3.653109  -0.965221   -0.468390   -0.963596
+
+
+Last 10 rows of panel matrix:
+variable               Vwind_550  Vwind_850  Vwind_950        blh  humidity_550  humidity_850  humidity_950       pm10  solar_radiation_downwards  surface_pressure  temperature_2m  temperature_550  temperature_850  temperature_950  total_precipitation  uwind_550  uwind_850  uwind_950  wind_u_10m  wind_v_10m
+week_start station_id                                                                                                                                                                                                                                                                                               
+2025-01-06 ARPAL_026   -0.046489   0.721676  -0.421455  36.046345     15.337738     41.242868     57.159419  41.052500              259021.500000      97216.110000      274.957590       256.278833       277.652894       281.221619             0.000000   1.140730   0.690500  -0.052754   -0.350946   -1.161608
+           ARPAL_027    1.266630   0.866202   1.435848  42.638468     16.516049     39.744456     58.567459  58.987917              233736.333333     101967.443333      275.442700       256.207139       277.915550       280.662105             0.008970  -0.547333   1.544880   1.757160    0.634691   -0.079516
+           ARPAL_028    1.080793   1.808858   2.515163  68.310668     15.586311     41.829864     71.306636  39.792083              225794.666667     101122.068333      277.392975       256.201052       278.044033       280.561037             0.021428  -1.015256   1.998398   2.036898    0.228929    0.133883
+           BR1         -1.300039  -0.453707  -0.431819  14.937296     10.220761     69.195940     73.151039  19.958333              268513.333333      86931.318333      266.771147       256.239864       276.631465       282.408564             0.000000   2.349585  -0.326529  -0.255834   -0.356561   -0.800077
+           BX1         -1.590656  -0.435873  -0.542744  18.488728     10.495579     57.038238     64.039302  26.750000              267063.500000      85676.901667      269.017569       256.244084       276.468947       282.278849             0.000000   2.375427  -0.190675  -0.174979   -0.413283   -0.563281
+           BZ4         -1.792011   0.201119  -0.568643  46.699341      9.464281     39.894995     60.808155  43.791667              263593.666667      92929.651667      275.173655       256.273603       276.545866       281.795176             0.000000   2.992998   0.250643  -0.075229   -0.078607   -0.406685
+           BZ5         -1.792011   0.201119  -0.568643  46.699341      9.464281     39.894995     60.808155  17.708333              263593.666667      92929.651667      275.173655       256.273603       276.545866       281.795176             0.000000   2.992998   0.250643  -0.075229   -0.078607   -0.406685
+           LA1         -1.829002  -0.565737  -0.680278  17.382934     11.540934     53.316490     54.294538  49.375000              271648.833333      83650.818333      268.715973       256.233459       277.730874       283.770097             0.000000   2.814948   1.216223   1.274550    0.976487   -0.417203
+           LS1         -1.792011   0.201119  -0.568643  46.699341      9.464281     39.894995     60.808155  23.000000              266538.333333      92298.526667      274.206450       256.273603       276.545866       281.795176             0.000000   2.992998   0.250643  -0.075229   -0.329339   -0.260729
+           ME1         -1.832521  -0.022294  -0.696152  39.718220     10.673960     40.303497     52.800261  29.166667              259494.166667      86446.110000      272.154694       256.245904       277.274450       282.634216             0.000000   2.972775   1.214307   0.894869    0.503831   -0.820279
+
+--- 6. Descriptive Statistics ---
+
+Summary statistics for all variables:
+variable  Vwind_550  Vwind_850  Vwind_950       blh  humidity_550  humidity_850  humidity_950      pm10  solar_radiation_downwards  surface_pressure  temperature_2m  temperature_550  temperature_850  temperature_950  total_precipitation  uwind_550  uwind_850  uwind_950  wind_u_10m  wind_v_10m
+count      21275.00   21275.00   21275.00  21275.00      21275.00      21275.00      21275.00  21275.00                   21275.00          21275.00        21275.00         21275.00         21275.00         21275.00             21275.00   21275.00   21275.00   21275.00    21275.00    21275.00
+mean          -1.61       0.15      -0.06    349.17         49.19         66.77         67.74     24.57                  563564.54          95024.63          284.48           259.95           280.55           286.31                24.15       5.61       0.23      -0.51       -0.19       -0.26
+std            5.78       1.59       0.82    179.91         13.42         12.49         10.66     14.89                  274159.42           5790.90            8.05             5.19             6.00             6.54                26.59       5.79       1.94       1.34        0.51        0.47
+min          -27.16     -10.29      -6.14     14.94          8.87         21.08         21.60      2.17                   72795.55          80084.10          257.38           245.10           265.13           270.87                 0.00     -13.53     -12.12     -11.97       -5.90       -3.46
+25%           -4.86      -0.64      -0.44    194.80         39.64         60.10         60.81     14.59                  293458.30          90365.67          278.04           255.96           275.66           280.65                 4.27       1.56      -0.39      -0.91       -0.35       -0.52
+50%           -1.30       0.11      -0.05    357.94         48.89         68.18         68.23     20.40                  567720.19          97547.25          284.35           259.74           280.01           285.80                15.98       5.48       0.11      -0.12       -0.09       -0.23
+75%            1.84       0.88       0.31    469.41         58.02         75.26         75.16     29.84                  809215.94         100188.75          290.82           264.47           285.76           292.16                35.47       9.62       0.92       0.11        0.09        0.04
+max           20.10       9.68       6.88   1123.29         91.15         97.60         98.15    173.11                 1132926.69         103969.77          303.99           270.77           294.39           300.85               270.88      25.08      11.99       8.89        1.92        1.97
+
+--- 7. Panel Matrix Memory Usage ---
+
+Total Memory Usage: 3.33 MB
+
+--- Saving Panel Matrix ---
+
+Output file: /Users/ettoremiglioranza/Projects/gar4ds/data/panel_data_matrix.parquet
+Format: Parquet (compressed)
+✓ Panel matrix saved successfully
+  File size: 3.04 MB
+  Location: /Users/ettoremiglioranza/Projects/gar4ds/data/panel_data_matrix.parquet
+
+================================================================================
+  PIPELINE COMPLETED SUCCESSFULLY
+================================================================================
+
+Output Log Saved: /Users/ettoremiglioranza/Projects/gar4ds/results/dataset_documentation/panel_matrix_info_20260209_165340.txt
+
+Panel Matrix Created:
+  - File: /Users/ettoremiglioranza/Projects/gar4ds/data/panel_data_matrix.parquet
+  - Structure: Multi-Index (week_start, station_id)
+  - Dimensions: 21,275 × 20
+  - Variables: 20
+  - Stations: 37
+  - Weeks: 575
+
+✓ All operations completed without errors
