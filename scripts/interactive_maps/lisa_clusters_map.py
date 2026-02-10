@@ -305,6 +305,36 @@ def generate_lisa_map():
     '''
     m.get_root().html.add_child(Element(legend_html))
     
+    # Add Global Moran's I Statistics Panel
+    stats_html = '''
+    <div style="
+        position: fixed;
+        top: 80px;
+        left: 50px;
+        z-index: 1000;
+        background-color: white;
+        padding: 12px 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        font-family: Arial, sans-serif;
+        width: 220px;
+    ">
+        <h4 style="margin: 0 0 10px 0; color: #333; font-size: 14px;">📊 Global Spatial Autocorrelation</h4>
+        <div style="background: #e8f5e9; padding: 8px; border-radius: 4px; border-left: 3px solid #4caf50; margin-bottom: 8px;">
+            <div style="font-size: 12px; color: #333;">
+                <strong>PM₁₀ Statistics:</strong><br>
+                • Global Moran's I: <strong>0.681</strong><br>
+                • Z-score: <strong>9.01</strong><br>
+                • p-value: <strong>&lt;0.001</strong>
+            </div>
+        </div>
+        <div style="font-size: 11px; color: #666; font-style: italic;">
+            Interpretation: Strong positive spatial autocorrelation
+        </div>
+    </div>
+    '''
+    m.get_root().html.add_child(Element(stats_html))
+    
     # Add title
     title_html = '''
     <div style="

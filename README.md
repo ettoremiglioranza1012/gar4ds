@@ -7,7 +7,46 @@
 
 ---
 
-## 📋 Project Overview
+## � Dependencies & Environment
+
+### Package Manager
+- **uv** `0.9.9` (used for dependency management and reproducibility)
+
+### Python Dependencies
+
+**Core Data Processing:**
+- `pandas` ≥ 2.3.3
+- `numpy` ≥ 2.3.5
+- `polars` ≥ 1.37.1
+- `pyarrow` ≥ 23.0.0
+- `duckdb` ≥ 1.4.3
+
+**Geospatial Analysis:**
+- `geopandas` ≥ 1.0.0
+- `shapely` ≥ 2.0.0
+- `contextily` ≥ 1.7.0
+
+**Spatial Econometrics:**
+- `pysal` ≥ 24.0.0
+- `esda` ≥ 2.6.0
+- `libpysal` ≥ 4.12.0
+- `spreg` ≥ 1.6.0
+
+**Visualization:**
+- `matplotlib` ≥ 3.9.0
+- `seaborn` ≥ 0.13.0
+- `folium` ≥ 0.18.0
+
+**Scientific Computing:**
+- `scipy` ≥ 1.14.0
+- `networkx` ≥ 3.3
+- `polar` ≥ 0.0.127
+
+> **Note:** All dependencies are specified in `pyproject.toml` with minimum version requirements. Use `uv sync` to ensure reproducible installations.
+
+---
+
+## �📋 Project Overview
 
 This project implements a comprehensive spatial econometric analysis to quantify cross-border PM10 pollution transport from the Po Valley (Northern Italy) to Alpine regions (Trentino, Veneto). Using Panel Fixed Effects Spatial Durbin Models (SDM), we decompose pollution into:
 

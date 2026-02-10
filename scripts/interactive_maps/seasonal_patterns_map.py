@@ -67,6 +67,14 @@ def load_panel_data():
     return None
 
 
+def load_regime_clusters():
+    """Load atmospheric regime cluster assignments"""
+    regime_path = RESULTS_DIR / 'spatial_analysis' / 'optionC_multivariate_clusters.csv'
+    if regime_path.exists():
+        return pd.read_csv(regime_path)
+    return None
+
+
 def compute_seasonal_data(panel_df, stations_gdf):
     """Compute seasonal statistics for each station"""
     
@@ -161,6 +169,22 @@ SEASON_ICONS = {
 
 SEASON_ORDER = ['Winter', 'Spring', 'Summer', 'Autumn']
 
+REGIME_COLORS = {
+    0: '#17a2b8',  # Cyan - Coastal/High Wind
+    1: '#28a745',  # Green - Continental/Alpine
+    2: '#6c757d',  # Grey - High Humidity/Mountains
+    3: '#fd7e14',  # Orange - Warm/Low Humidity
+    4: '#007bff'   # Dark cyan - Mixed conditions
+}
+
+REGIME_CHARACTERISTICS = {
+    0: 'Coastal/High Wind Regime',
+    1: 'Continental/Alpine Regime',
+    2: 'High Humidity/Mountain Regime',
+    3: 'Warm/Low Humidity Regime',
+    4: 'Mixed Atmospheric Conditions'
+}
+
 
 def create_seasonal_popup(station_data, season):
     """Create detailed popup for a season/station combination"""
@@ -234,6 +258,7 @@ def generate_seasonal_map():
     print("\n[1] Loading data...")
     stations_gdf = load_station_metadata()
     panel_df = load_panel_data()
+    regime_df = load_regime_clusters()
     
     if panel_df is None:
         print("    ✗ Error: Panel data not found")
@@ -241,6 +266,8 @@ def generate_seasonal_map():
     
     print(f"    • Stations: {len(stations_gdf)}")
     print(f"    • Panel observations: {len(panel_df)}")
+    if regime_df is not None:
+        print(f"    • Regime clusters: {len(regime_df)} stations")
     
     # Compute seasonal statistics
     print("\n[2] Computing seasonal statistics...")
@@ -366,8 +393,66 @@ def generate_seasonal_map():
         
         fg.add_to(m)
     
+    # Add Atmospheric Regime layer
+    print("\n[6] Creating atmospheric regime layer...")
+    if regime_df is not None:
+        regime_fg = folium.FeatureGroup(name='🌀 Atmospheric Regimes', show=False)
+        
+        for _, row in regime_df.iterrows():
+            station_id = str(row['Station'])
+            cluster_id = int(row['Cluster'])
+            lat = row['Latitude']
+            lon = row['Longitude']
+            
+            if pd.isna(lat) or pd.isna(lon):
+                continue
+            
+            # Get regime characteristics
+            regime_color = REGIME_COLORS.get(cluster_id, '#666666')
+            regime_name = REGIME_CHARACTERISTICS.get(cluster_id, f'Cluster {cluster_id}')
+            
+            # Find station info
+            station_info = stations_gdf[stations_gdf['station_code'] == station_id]
+            if not station_info.empty:
+                station_name = station_info.iloc[0]['station_name']
+            else:
+                station_name = station_id
+            
+            # Create popup with regime info
+            popup_html = f"""
+            <div style="font-family: Arial, sans-serif; width: 300px;">
+                <div style="background: {regime_color}; color: white; padding: 10px; border-radius: 8px 8px 0 0;">
+                    <h4 style="margin: 0;">🌀 {station_name}</h4>
+                </div>
+                <div style="padding: 12px; background: white; border: 1px solid #ddd; border-top: none; border-radius: 0 0 8px 8px;">
+                    <div style="background: {regime_color}20; padding: 10px; border-radius: 6px; border-left: 4px solid {regime_color}; margin-bottom: 10px;">
+                        <strong style="font-size: 14px;">Regime {cluster_id}: {regime_name}</strong>
+                    </div>
+                    <div style="font-size: 12px; color: #666;">
+                        <strong>Station ID:</strong> {station_id}<br>
+                        <strong>Location:</strong> {lat:.4f}, {lon:.4f}
+                    </div>
+                </div>
+            </div>
+            """
+            
+            folium.CircleMarker(
+                location=[lat, lon],
+                radius=9,
+                color=regime_color,
+                weight=3,
+                fill=True,
+                fill_color=regime_color,
+                fill_opacity=0.7,
+                popup=folium.Popup(popup_html, max_width=320),
+                tooltip=f"{station_name}: {regime_name}"
+            ).add_to(regime_fg)
+        
+        regime_fg.add_to(m)
+        print(f"    • Added regime layer with {len(regime_df)} stations")
+    
     # Add legend and info panel
-    print("\n[6] Adding UI elements...")
+    print("\n[7] Adding UI elements...")
     
     # Compute useful statistics for legend
     winter_mean = seasonal_df[seasonal_df['season'] == 'Winter']['pm10_mean'].mean()
@@ -424,6 +509,11 @@ def generate_seasonal_map():
             <hr style="margin: 6px 0; border: none; border-top: 1px solid #ddd;">
             • Plain (winter): <strong>{plain_winter:.1f}</strong> μg/m³<br>
             • Mountain (winter): <strong>{mountain_winter:.1f}</strong> μg/m³
+        </div>
+        
+        <div style="background: #e3f2fd; padding: 8px; border-radius: 4px; font-size: 11px; margin-top: 10px; border-left: 3px solid #2196f3;">
+            💡 <strong>Seasonal Insight:</strong><br>
+            Winter concentrations are highest in Plains (39.1 μg/m³) vs Mountains (18.2 μg/m³)
         </div>
     </div>
     '''
@@ -489,7 +579,7 @@ def generate_seasonal_map():
     folium.LayerControl(collapsed=False).add_to(m)
     
     # Save map
-    print("\n[7] Saving map...")
+    print("\n[8] Saving map...")
     output_path = ASSETS_DIR / 'seasonal_pm10_patterns.html'
     m.save(str(output_path))
     print(f"    ✓ Saved: {output_path}")
