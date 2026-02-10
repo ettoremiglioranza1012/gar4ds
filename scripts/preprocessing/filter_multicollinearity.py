@@ -33,6 +33,10 @@ from pathlib import Path
 from datetime import datetime
 import sys
 
+# Import temporal configuration
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import get_config, TEMPORAL_FREQUENCY, get_output_path
+
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
@@ -45,13 +49,16 @@ RESULTS_DIR = PROJECT_DIR / 'results' / 'dataset_documentation'
 # Create directories
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
+# Temporal configuration
+TEMP_CONFIG = get_config()
+
 # Input/Output files
-INPUT_FILE = DATA_DIR / 'panel_data_matrix.parquet'
-OUTPUT_FILE = DATA_DIR / 'panel_data_matrix_filtered_for_collinearity.parquet'
+INPUT_FILE = DATA_DIR / get_output_path('panel_data_matrix')
+OUTPUT_FILE = DATA_DIR / get_output_path('panel_data_matrix_filtered_for_collinearity')
 
 # Output log
 TIMESTAMP = datetime.now().strftime('%Y%m%d_%H%M%S')
-OUTPUT_LOG = RESULTS_DIR / f'multicollinearity_filter_{TIMESTAMP}.txt'
+OUTPUT_LOG = RESULTS_DIR / f'multicollinearity_filter_{TEMPORAL_FREQUENCY}_{TIMESTAMP}.txt'
 
 
 # ============================================================================

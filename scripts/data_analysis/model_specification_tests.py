@@ -48,6 +48,11 @@ import sys
 import warnings
 warnings.filterwarnings('ignore')
 
+# Import temporal configuration
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import get_config, get_output_path
+TEMP_CONFIG = get_config()
+
 # ============================================================================
 # DIRECTORY SETUP
 # ============================================================================
@@ -110,10 +115,10 @@ def load_panel_data(data_path):
     print(f"    ✓ Columns: {list(df.columns)}")
     
     if len(df.index.names) == 2:
-        n_weeks = df.index.get_level_values(0).nunique()
+        n_periods = df.index.get_level_values(0).nunique()
         n_stations = df.index.get_level_values(1).nunique()
         print(f"    ✓ MultiIndex confirmed: {df.index.names}")
-        print(f"    ✓ Time periods: {n_weeks}")
+        print(f"    ✓ Time periods: {n_periods}")
         print(f"    ✓ Stations: {n_stations}")
         print(f"    ✓ Total observations: {len(df)}")
     
@@ -197,11 +202,11 @@ def prepare_data(panel_df, meta_df, w):
     
     # Create spatially lagged features (WX)
     print("\n    Step 5: Creating spatially lagged features (WX matrix)")
-    weeks = panel_df.index.get_level_values('week_start').unique().sort_values()
-    n_weeks = len(weeks)
+    periods = panel_df.index.get_level_values(TEMP_CONFIG['period_column']).unique().sort_values()
+    n_periods = len(periods)
     n_stations = len(common_stations)
     
-    print(f"        Dimensions: {n_weeks} weeks × {n_stations} stations × {len(met_vars)} vars")
+    print(f"        Dimensions: {n_periods} {TEMP_CONFIG['period_label']} × {n_stations} stations × {len(met_vars)} vars")
     
     # Initialize lagged feature columns
     lagged_vars = [f'lag_{var}' for var in met_vars]
@@ -213,26 +218,26 @@ def prepare_data(panel_df, meta_df, w):
     station_to_idx = {station: idx for idx, station in enumerate(w_ids)}
     
     # Compute spatial lags
-    progress_interval = max(1, n_weeks // 10)
-    for i, week in enumerate(weeks):
-        week_data = panel_df.xs(week, level='week_start')
-        week_data_aligned = week_data.reindex(w_ids)
-        X_week = week_data_aligned[met_vars].values
+    progress_interval = max(1, n_periods // 10)
+    for i, period in enumerate(periods):
+        period_data = panel_df.xs(period, level=TEMP_CONFIG['period_column'])
+        period_data_aligned = period_data.reindex(w_ids)
+        X_period = period_data_aligned[met_vars].values
         
-        WX_week = np.zeros_like(X_week)
+        WX_period = np.zeros_like(X_period)
         for j, station in enumerate(w_ids):
             neighbors = w.neighbors[station]
             weights = w.weights[station]
             neighbor_indices = [station_to_idx[n] for n in neighbors]
-            WX_week[j, :] = np.sum([weights[k] * X_week[neighbor_indices[k], :] 
+            WX_period[j, :] = np.sum([weights[k] * X_period[neighbor_indices[k], :] 
                                     for k in range(len(neighbors))], axis=0)
         
         for v, lag_var in enumerate(lagged_vars):
             for s, station in enumerate(w_ids):
-                panel_df.loc[(week, station), lag_var] = WX_week[s, v]
+                panel_df.loc[(period, station), lag_var] = WX_period[s, v]
         
         if (i + 1) % progress_interval == 0:
-            print(f"        Progress: {i+1}/{n_weeks} weeks ({(i+1)/n_weeks*100:.1f}%)")
+            print(f"        Progress: {i+1}/{n_periods} {TEMP_CONFIG['period_label']} ({(i+1)/n_periods*100:.1f}%)")
     
     print(f"        ✓ Created {len(lagged_vars)} spatially lagged features")
     
@@ -705,7 +710,7 @@ def main():
     
     try:
         # 1-3. Load data
-        panel_df = load_panel_data(DATA_DIR / 'panel_data_matrix_filtered_for_collinearity.parquet')
+        panel_df = load_panel_data(DATA_DIR / get_output_path('panel_data_matrix_filtered_for_collinearity'))
         meta_df = load_station_metadata(DATA_DIR / 'pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson')
         w = load_spatial_weights(WEIGHTS_DIR / 'spatial_weights_knn6.gal')
         

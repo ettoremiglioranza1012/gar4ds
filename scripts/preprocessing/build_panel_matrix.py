@@ -2,17 +2,19 @@
 """
 Panel Matrix Builder
 ===================
-This script transforms the wide-format hourly dataset into a weekly aggregated
+This script transforms the wide-format hourly dataset into a temporally aggregated
 panel matrix with proper Multi-Index structure.
 
 Transformation steps:
 1. Parse column headers to extract variable names and station IDs
 2. Reshape from wide to long format
 3. Pivot variables into separate columns
-4. Aggregate to weekly frequency (mean)
+4. Aggregate to configured frequency (daily/weekly/monthly)
 5. Create Multi-Index (timestamp, station_id)
 
 All disruptive operations are documented in the console output.
+
+Temporal frequency controlled by scripts/config.py
 """
 
 import os
@@ -23,17 +25,25 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 
+# Import temporal configuration
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import get_config, TEMPORAL_FREQUENCY, get_output_path
+
 # Configure paths
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data"
 RESULTS_DIR = BASE_DIR / "results" / "dataset_documentation"
 
+# Temporal configuration
+TEMP_CONFIG = get_config()
+
 # File paths
 INPUT_PARQUET = DATA_DIR / "pm10_era5_land_era5_reanalysis_blh.parquet"
-OUTPUT_PARQUET = DATA_DIR / "panel_data_matrix.parquet"
+OUTPUT_PARQUET = DATA_DIR / get_output_path("panel_data_matrix")
 
 # Output file
-OUTPUT_LOG = RESULTS_DIR / f"panel_matrix_info_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+OUTPUT_LOG = RESULTS_DIR / f"panel_matrix_info_{TEMPORAL_FREQUENCY}_{timestamp}.txt"
 
 
 class OutputLogger:
@@ -225,10 +235,11 @@ def pivot_variables(df_long):
     return df_pivot
 
 
-def aggregate_to_weekly(df_pivot):
-    """Aggregate to weekly frequency"""
-    print_subsection("Step 4: Aggregating to Weekly Frequency")
-    print("⚠ DISRUPTIVE OPERATION: Temporal aggregation (Hourly → Weekly)")
+def aggregate_temporal(df_pivot, config):
+    """Aggregate to configured temporal frequency"""
+    freq_label = config['label']
+    print_subsection(f"Step 4: Aggregating to {freq_label} Frequency")
+    print(f"⚠ DISRUPTIVE OPERATION: Temporal aggregation (Hourly → {freq_label})")
     
     print(f"Original temporal resolution: Hourly")
     print(f"Original observations: {len(df_pivot):,}")
@@ -237,9 +248,9 @@ def aggregate_to_weekly(df_pivot):
     # Set datetime as index temporarily for resampling
     df_pivot['datetime'] = pd.to_datetime(df_pivot['datetime'])
     
-    print("\nResampling to weekly frequency (Week start = Monday)...")
+    print(f"\nResampling to {freq_label.lower()} frequency ({config['description']})...")
     print("  Using MEAN for most variables (temperature, wind, etc.)")
-    print("  Using SUM for precipitation (accumulation over week)")
+    print(f"  Using SUM for precipitation (accumulation over {config['period_label']})")
     
     # Identify precipitation columns
     precip_cols = [col for col in df_pivot.columns if 'precipitation' in col.lower()]
@@ -257,72 +268,77 @@ def aggregate_to_weekly(df_pivot):
     print(f"  Other columns using MEAN: {len(agg_dict) - len(precip_cols)}")
     
     # Group by station_id and resample with different aggregations
-    df_weekly = df_pivot.set_index('datetime').groupby('station_id').resample('W-MON').agg(agg_dict)
+    resample_code = config['resample_code']
+    df_aggregated = df_pivot.set_index('datetime').groupby('station_id').resample(resample_code).agg(agg_dict)
     
     # Reset index to get datetime and station_id as columns
-    df_weekly = df_weekly.reset_index()
+    df_aggregated = df_aggregated.reset_index()
     
-    # Rename datetime to be clearer
-    df_weekly = df_weekly.rename(columns={'datetime': 'week_start'})
+    # Rename datetime to configured period column name
+    period_col = config['period_column']
+    df_aggregated = df_aggregated.rename(columns={'datetime': period_col})
     
-    print(f"✓ Weekly aggregation complete")
-    print(f"  New shape: {df_weekly.shape}")
-    print(f"  New observations: {len(df_weekly):,}")
-    print(f"  Weeks covered: {df_weekly['week_start'].nunique()}")
-    print(f"  Date range: {df_weekly['week_start'].min()} to {df_weekly['week_start'].max()}")
+    print(f"✓ {freq_label} aggregation complete")
+    print(f"  New shape: {df_aggregated.shape}")
+    print(f"  New observations: {len(df_aggregated):,}")
+    print(f"  {config['label']} periods covered: {df_aggregated[period_col].nunique()}")
+    print(f"  Date range: {df_aggregated[period_col].min()} to {df_aggregated[period_col].max()}")
     
     # Calculate aggregation statistics
     original_hours = len(df_pivot)
-    weekly_records = len(df_weekly)
-    reduction = (1 - weekly_records / original_hours) * 100
+    aggregated_records = len(df_aggregated)
+    reduction = (1 - aggregated_records / original_hours) * 100
     
     print(f"\nAggregation statistics:")
     print(f"  Original hourly records: {original_hours:,}")
-    print(f"  Weekly aggregated records: {weekly_records:,}")
+    print(f"  {freq_label} aggregated records: {aggregated_records:,}")
     print(f"  Data reduction: {reduction:.1f}%")
-    print(f"  Average hours per weekly record: {original_hours / weekly_records:.1f}")
-        # Convert precipitation from meters to millimeters for interpretability
+    print(f"  Average hours per {config['period_label']}: {original_hours / aggregated_records:.1f}")
+    # Convert precipitation from meters to millimeters for interpretability
     print(f'\n⚠ UNIT CONVERSION: Converting precipitation from meters to mm')
     for col in precip_cols:
-        if col in df_weekly.columns:
-            df_weekly[col] = df_weekly[col] * 1000  # meters to millimeters
+        if col in df_aggregated.columns:
+            df_aggregated[col] = df_aggregated[col] * 1000  # meters to millimeters
             print(f'  {col}: m → mm')
     
     if precip_cols:
         print(f'\nPrecipitation statistics (after conversion to mm):')
+        period_label_plural = config['period_label_plural']
         for col in precip_cols[:3]:  # Show first 3 as sample
-            if col in df_weekly.columns:
-                non_zero = df_weekly[col][df_weekly[col] > 0]
+            if col in df_aggregated.columns:
+                non_zero = df_aggregated[col][df_aggregated[col] > 0]
                 print(f'  {col}:')
-                print(f'    Mean (all weeks): {df_weekly[col].mean():.3f} mm')
-                print(f'    Mean (rainy weeks): {non_zero.mean():.3f} mm' if len(non_zero) > 0 else '    No rainy weeks')
-                print(f'    Max: {df_weekly[col].max():.3f} mm')
-        return df_weekly
+                print(f'    Mean (all {period_label_plural}): {df_aggregated[col].mean():.3f} mm')
+                print(f'    Mean (rainy {period_label_plural}): {non_zero.mean():.3f} mm' if len(non_zero) > 0 else f'    No rainy {period_label_plural}')
+                print(f'    Max: {df_aggregated[col].max():.3f} mm')
+    
+    return df_aggregated
 
 
-def create_panel_index(df_weekly):
+def create_panel_index(df_aggregated, config):
     """Create Multi-Index panel structure"""
+    period_col = config['period_column']
     print_subsection("Step 5: Creating Panel Multi-Index Structure")
-    print("⚠ DISRUPTIVE OPERATION: Creating Multi-Index [week_start, station_id]")
+    print(f"⚠ DISRUPTIVE OPERATION: Creating Multi-Index [{period_col}, station_id]")
     
     # Sort by time and station
     print("Sorting by timestamp and station_id...")
-    df_panel = df_weekly.sort_values(['week_start', 'station_id'])
+    df_panel = df_aggregated.sort_values([period_col, 'station_id'])
     
     # Set Multi-Index
     print("Setting Multi-Index...")
-    df_panel = df_panel.set_index(['week_start', 'station_id'])
+    df_panel = df_panel.set_index([period_col, 'station_id'])
     
     print(f"✓ Panel structure created")
     print(f"  Index: {df_panel.index.names}")
     print(f"  Shape: {df_panel.shape}")
-    print(f"  Weeks: {df_panel.index.get_level_values('week_start').nunique()}")
+    print(f"  {config['label']} periods: {df_panel.index.get_level_values(period_col).nunique()}")
     print(f"  Stations: {df_panel.index.get_level_values('station_id').nunique()}")
     
     return df_panel
 
 
-def analyze_panel_matrix(df_panel):
+def analyze_panel_matrix(df_panel, config):
     """Provide comprehensive analysis of the panel matrix"""
     print_section("PANEL MATRIX ANALYSIS")
     
@@ -332,14 +348,15 @@ def analyze_panel_matrix(df_panel):
     print(f"Index Levels: {df_panel.index.names}")
     
     # Temporal coverage
-    weeks = df_panel.index.get_level_values('week_start')
+    period_col = config['period_column']
+    periods = df_panel.index.get_level_values(period_col)
     stations = df_panel.index.get_level_values('station_id')
     
     print(f"\nTemporal Coverage:")
-    print(f"  Start Date: {weeks.min()}")
-    print(f"  End Date: {weeks.max()}")
-    print(f"  Total Weeks: {weeks.nunique()}")
-    print(f"  Duration: {(weeks.max() - weeks.min()).days} days ({(weeks.max() - weeks.min()).days/7:.1f} weeks)")
+    print(f"  Start Date: {periods.min()}")
+    print(f"  End Date: {periods.max()}")
+    print(f"  Total {config['label']} Periods: {periods.nunique()}")
+    print(f"  Duration: {(periods.max() - periods.min()).days} days")
     
     print(f"\nEntity Coverage:")
     print(f"  Total Stations: {stations.nunique()}")
@@ -355,18 +372,18 @@ def analyze_panel_matrix(df_panel):
     
     print_subsection("3. Panel Balance")
     # Check if panel is balanced
-    weeks_per_station = df_panel.groupby(level='station_id').size()
-    is_balanced = weeks_per_station.nunique() == 1
+    periods_per_station = df_panel.groupby(level='station_id').size()
+    is_balanced = periods_per_station.nunique() == 1
     
     print(f"Panel Type: {'Balanced' if is_balanced else 'Unbalanced'}")
-    print(f"  Min observations per station: {weeks_per_station.min()}")
-    print(f"  Max observations per station: {weeks_per_station.max()}")
-    print(f"  Mean observations per station: {weeks_per_station.mean():.1f}")
+    print(f"  Min observations per station: {periods_per_station.min()}")
+    print(f"  Max observations per station: {periods_per_station.max()}")
+    print(f"  Mean observations per station: {periods_per_station.mean():.1f}")
     
     if not is_balanced:
-        print("\n⚠ Panel is unbalanced. Observations per station:")
-        for station, count in weeks_per_station.items():
-            print(f"    {station}: {count} weeks")
+        print(f"\n⚠ Panel is unbalanced. Observations per station:")
+        for station, count in periods_per_station.items():
+            print(f"    {station}: {count} {config['period_label_plural']}")
     
     print_subsection("4. Data Quality")
     # Missing values
@@ -428,6 +445,8 @@ def main():
         print(f"Results Directory: {RESULTS_DIR}")
         
         print_section("TRANSFORMATION PIPELINE")
+        print(f"Configuration: {TEMP_CONFIG['label']} aggregation ({TEMP_CONFIG['description']})")
+        print(f"Output will be saved to: {OUTPUT_PARQUET.name}\n")
         
         # Step 0: Load data
         df = load_and_parse_data()
@@ -438,14 +457,14 @@ def main():
         # Step 3: Pivot variables to columns
         df_pivot = pivot_variables(df_long)
         
-        # Step 4: Aggregate to weekly
-        df_weekly = aggregate_to_weekly(df_pivot)
+        # Step 4: Aggregate to configured frequency
+        df_aggregated = aggregate_temporal(df_pivot, TEMP_CONFIG)
         
         # Step 5: Create panel index
-        df_panel = create_panel_index(df_weekly)
+        df_panel = create_panel_index(df_aggregated, TEMP_CONFIG)
         
         # Analyze the panel matrix
-        analyze_panel_matrix(df_panel)
+        analyze_panel_matrix(df_panel, TEMP_CONFIG)
         
         # Save the panel matrix
         save_panel_matrix(df_panel)
@@ -454,12 +473,13 @@ def main():
         print_section("PIPELINE COMPLETED SUCCESSFULLY")
         print(f"Output Log Saved: {OUTPUT_LOG}")
         print(f"\nPanel Matrix Created:")
+        print(f"  - Frequency: {TEMP_CONFIG['label']} ({TEMP_CONFIG['description']})")
         print(f"  - File: {OUTPUT_PARQUET}")
-        print(f"  - Structure: Multi-Index (week_start, station_id)")
+        print(f"  - Structure: Multi-Index ({TEMP_CONFIG['period_column']}, station_id)")
         print(f"  - Dimensions: {df_panel.shape[0]:,} × {df_panel.shape[1]}")
         print(f"  - Variables: {n_variables}")
         print(f"  - Stations: {n_stations}")
-        print(f"  - Weeks: {df_panel.index.get_level_values('week_start').nunique()}")
+        print(f"  - Time Periods: {df_panel.index.get_level_values(TEMP_CONFIG['period_column']).nunique()}")
         print(f"\n✓ All operations completed without errors")
         
     except Exception as e:

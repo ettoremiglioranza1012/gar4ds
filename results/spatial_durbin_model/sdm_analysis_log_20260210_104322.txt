@@ -1,0 +1,531 @@
+================================================================================
+SPATIAL DURBIN MODEL - PANEL DATA ANALYSIS
+================================================================================
+
+Analysis Date: 2026-02-10 10:43:22.127495
+
+Outputs:
+    Text Log: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_durbin_model/sdm_analysis_log_20260210_104322.txt
+    CSV Results: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_durbin_model
+    Visualizations: /Users/ettoremiglioranza/Projects/gar4ds/assets/spatial_durbin_model
+
+================================================================================
+1. LOADING FILTERED PANEL DATA
+================================================================================
+    File: /Users/ettoremiglioranza/Projects/gar4ds/data/panel_data_matrix_filtered_for_collinearity_daily.parquet
+    ✓ Shape: (148666, 12) (observations × variables)
+    ✓ Index: ['date', 'station_id']
+    ✓ Columns: ['pm10', 'temperature_2m', 'humidity_950', 'blh', 'solar_radiation_downwards', 'wind_u_10m', 'wind_v_10m', 'uwind_850', 'uwind_950', 'Vwind_850', 'Vwind_950', 'total_precipitation']
+    ✓ MultiIndex confirmed: ['date', 'station_id']
+    ✓ Time periods (days): 4018
+    ✓ Stations: 37
+    ✓ Total observations: 148666
+
+    Variable Summary:
+        pm10                           | mean=24.54, std=18.14
+        temperature_2m                 | mean=284.50, std=8.20
+        humidity_950                   | mean=67.75, std=14.93
+        blh                            | mean=349.70, std=218.85
+        solar_radiation_downwards      | mean=564131.19, std=304963.41
+        wind_u_10m                     | mean=-0.19, std=0.79
+        wind_v_10m                     | mean=-0.26, std=0.71
+        uwind_850                      | mean=0.22, std=3.00
+        uwind_950                      | mean=-0.51, std=2.14
+        Vwind_850                      | mean=0.15, std=2.63
+        Vwind_950                      | mean=-0.06, std=1.44
+        total_precipitation            | mean=3.46, std=7.27
+
+================================================================================
+2. LOADING STATION METADATA
+================================================================================
+    File: /Users/ettoremiglioranza/Projects/gar4ds/data/pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson
+    ✓ Loaded 37 stations
+    ✓ Regions: ['Veneto', 'Lombardia', 'Trentino', 'Alto-Adige']
+    ✓ Coordinate range:
+        Longitude: [8.7543, 12.5104]
+        Latitude: [44.9996, 46.7974]
+
+================================================================================
+3. LOADING SPATIAL WEIGHTS MATRIX
+================================================================================
+    File: /Users/ettoremiglioranza/Projects/gar4ds/weights/spatial_weights_knn6.gal
+    ✓ Number of observations: 37
+    ✓ Total connections: 222
+    ✓ Average neighbors: 6.00
+    ✓ Transformation: O
+
+================================================================================
+4. LOADING REGIME CLASSIFICATIONS
+================================================================================
+    File: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_analysis/optionC_multivariate_clusters.csv
+    ✓ Loaded 37 station classifications
+    ✓ Columns: ['Station', 'Cluster', 'Longitude', 'Latitude', 'PCA_1', 'PCA_2', 'temperature_2m', 'humidity_950', 'blh', 'solar_radiation_downwards', 'wind_u_10m', 'wind_v_10m', 'uwind_850', 'uwind_950', 'Vwind_850', 'Vwind_950', 'total_precipitation', 'pm10']
+
+    Cluster Distribution:
+        Cluster 0: 5 stations
+        Cluster 1: 6 stations
+        Cluster 2: 11 stations
+        Cluster 3: 8 stations
+        Cluster 4: 7 stations
+
+================================================================================
+5. PREPARING DATA FOR SDM
+================================================================================
+    Step 1: Log-transforming PM10
+        ✓ log_pm10 created (mean=3.031, std=0.650)
+
+    Step 2: Meteorological variables identified (11):
+        - temperature_2m
+        - humidity_950
+        - blh
+        - solar_radiation_downwards
+        - wind_u_10m
+        - wind_v_10m
+        - uwind_850
+        - uwind_950
+        - Vwind_850
+        - Vwind_950
+        - total_precipitation
+
+    Step 3: Checking station alignment
+        Panel stations: 37
+        Metadata stations: 37
+        ✓ Common stations: 37
+
+================================================================================
+6. STANDARDIZING VARIABLES
+================================================================================
+    Purpose: Eliminate unit-of-measurement bias
+    Method: StandardScaler (mean=0, std=1)
+
+    ✓ Standardized 11 variables
+
+    Post-standardization check:
+        temperature_2m                 | mean=-0.000000, std=1.000003
+        humidity_950                   | mean=0.000000, std=1.000003
+        blh                            | mean=-0.000000, std=1.000003
+        ...
+
+================================================================================
+7. CREATING SPATIALLY LAGGED FEATURES (WX MATRIX)
+================================================================================
+    Purpose: Manual Spatial Durbin Model construction
+    Method: Compute W @ X for each of the days
+
+    Dimensions:
+        Days: 4018
+        Stations: 37
+        Variables: 11
+        Total WX entries: 1,635,326
+
+    Computing spatial lags...
+        Progress: 401/4018 days (10.0%)
+        Progress: 802/4018 days (20.0%)
+        Progress: 1203/4018 days (29.9%)
+        Progress: 1604/4018 days (39.9%)
+        Progress: 2005/4018 days (49.9%)
+        Progress: 2406/4018 days (59.9%)
+        Progress: 2807/4018 days (69.9%)
+        Progress: 3208/4018 days (79.8%)
+        Progress: 3609/4018 days (89.8%)
+        Progress: 4010/4018 days (99.8%)
+
+    ✓ Created 11 spatially lagged features
+    ✓ Feature set:
+        Direct features (X): 11
+        Lagged features (WX): 11
+        Total features: 22
+
+================================================================================
+8. FITTING PANEL SPATIAL DURBIN MODEL
+================================================================================
+    Estimator: Panel Fixed Effects Spatial Lag (spreg.Panel_FE_Lag)
+    Specification: log(PM10) = ρWy + Xβ + WXθ + ε
+
+    Preparing arrays...
+    ✓ Filtered dataset: 148666 observations
+    ✓ y (log_pm10): shape (148666, 1)
+    ✓ X (met + lagged): shape (148666, 22)
+
+    Fitting model...
+    (This may take several minutes for 21k+ observations)
+
+    ✓ Model estimation complete!
+    ✓ Spatial lag coefficient (ρ): 0.138713
+    ✓ ρ p-value: 0.000000
+
+================================================================================
+9. SAVING MODEL SUMMARY
+================================================================================
+    ✓ Saved to: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_durbin_model/model_summary.txt
+
+================================================================================
+10. EXTRACTING COEFFICIENTS
+================================================================================
+    ✓ Extracted 24 coefficients
+
+    Spatial Lag Coefficient (ρ):
+        ρ = 0.138713
+
+    Significant Direct Effects (β):
+        temperature_2m                : β = -0.0690 ***
+        humidity_950                  : β =  0.0644 ***
+        blh                           : β = -0.0199 ***
+        solar_radiation_downwards     : β = -0.1164 ***
+        wind_u_10m                    : β =  0.0157 ***
+        wind_v_10m                    : β =  0.0173 ***
+        uwind_850                     : β =  0.0257 ***
+        Vwind_850                     : β = -0.0224 ***
+        Vwind_950                     : β = -0.0085 ***
+        total_precipitation           : β = -0.0266 ***
+        W_log_pm10                    : β =  0.1387 ***
+
+    Significant Indirect Effects (θ):
+        lag_temperature_2m            : θ =  0.0107 ***
+        lag_humidity_950              : θ = -0.0142 ***
+        lag_blh                       : θ = -0.0053 ***
+        lag_solar_radiation_downwards : θ =  0.0173 ***
+        lag_wind_u_10m                : θ = -0.0051 ***
+        lag_wind_v_10m                : θ = -0.0025 ***
+        lag_uwind_850                 : θ = -0.0022 ***
+        lag_uwind_950                 : θ =  0.0014 **
+        lag_Vwind_850                 : θ =  0.0070 ***
+        lag_Vwind_950                 : θ =  0.0013 **
+
+================================================================================
+11. DECOMPOSING SPILLOVER EFFECTS
+================================================================================
+    Components:
+        1. Direct Local Effect: X·β
+        2. Indirect Neighbor Effect: WX·θ
+        3. Endogenous Spillover: ρ·Wy
+
+    ✓ Computed direct effects (mean=-0.0000)
+    ✓ Computed indirect effects (mean=0.0094)
+    ✓ Endogenous spillover computed (mean=-0.0094)
+
+================================================================================
+13. REGIME-STRATIFIED ANALYSIS - ALL CLUSTERS
+================================================================================
+    Fitting separate SDM models for each atmospheric cluster
+    Testing hypothesis: Global model averages over distinct physical regimes
+
+
+    ============================================================
+    CLUSTER 0
+    ============================================================
+    Stations: 5
+    Observations: 20090
+    Creating subset spatial weights matrix...
+    ✓ Subset weights created: 5 stations, 5 connections
+    ✓ Row-standardized (transform=R)
+    Fitting model...
+    ✓ Model fit successful
+    ✓ ρ (Cluster 0) = 0.786992
+
+================================================================================
+10. EXTRACTING COEFFICIENTS
+================================================================================
+    ✓ Extracted 24 coefficients
+
+    Spatial Lag Coefficient (ρ):
+        ρ = 0.786992
+
+    Significant Direct Effects (β):
+        temperature_2m                : β = -0.3364 ***
+        humidity_950                  : β =  0.0604 ***
+        solar_radiation_downwards     : β = -0.1377 ***
+        wind_u_10m                    : β = -0.0079 **
+        uwind_850                     : β =  0.0396 ***
+        Vwind_850                     : β = -0.0486 ***
+        Vwind_950                     : β =  0.0375 ***
+        total_precipitation           : β = -0.0437 ***
+        W_log_pm10                    : β =  0.7870 ***
+
+    Significant Indirect Effects (θ):
+        lag_temperature_2m            : θ =  0.0537 ***
+        lag_humidity_950              : θ = -0.0144 ***
+        lag_blh                       : θ = -0.0143 ***
+        lag_solar_radiation_downwards : θ =  0.0202 ***
+        lag_wind_u_10m                : θ = -0.0039 ***
+        lag_uwind_850                 : θ = -0.0069 ***
+        lag_uwind_950                 : θ =  0.0040 ***
+        lag_Vwind_850                 : θ =  0.0105 ***
+        lag_Vwind_950                 : θ = -0.0082 ***
+        lag_total_precipitation       : θ =  0.0040 ***
+
+================================================================================
+9. SAVING MODEL SUMMARY
+================================================================================
+    ✓ Saved to: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_durbin_model/cluster_0_model_summary.txt
+    ✓ Saved model summary: cluster_0_model_summary.txt
+    ✓ Saved coefficients: cluster_0_coefficients.csv
+
+    ============================================================
+    CLUSTER 1
+    ============================================================
+    Stations: 6
+    Observations: 24108
+    Creating subset spatial weights matrix...
+    ✓ Subset weights created: 6 stations, 6 connections
+    ✓ Row-standardized (transform=R)
+    Fitting model...
+    ✓ Model fit successful
+    ✓ ρ (Cluster 1) = 0.754649
+
+================================================================================
+10. EXTRACTING COEFFICIENTS
+================================================================================
+    ✓ Extracted 24 coefficients
+
+    Spatial Lag Coefficient (ρ):
+        ρ = 0.754649
+
+    Significant Direct Effects (β):
+        temperature_2m                : β = -0.1200 ***
+        humidity_950                  : β =  0.0555 ***
+        blh                           : β =  0.0558 ***
+        wind_u_10m                    : β = -0.0324 **
+        wind_v_10m                    : β = -0.0775 ***
+        uwind_850                     : β =  0.2323 ***
+        uwind_950                     : β =  0.1494 ***
+        Vwind_850                     : β =  0.0779 ***
+        Vwind_950                     : β =  0.3835 ***
+        total_precipitation           : β = -0.0255 ***
+        W_log_pm10                    : β =  0.7546 ***
+
+    Significant Indirect Effects (θ):
+        lag_temperature_2m            : θ =  0.0179 ***
+        lag_humidity_950              : θ = -0.0169 ***
+        lag_blh                       : θ = -0.0178 ***
+        lag_solar_radiation_downwards : θ = -0.0071 **
+        lag_wind_u_10m                : θ =  0.0254 ***
+        lag_uwind_950                 : θ = -0.1023 ***
+        lag_Vwind_850                 : θ =  0.0080 ***
+        lag_Vwind_950                 : θ = -0.0528 ***
+
+================================================================================
+9. SAVING MODEL SUMMARY
+================================================================================
+    ✓ Saved to: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_durbin_model/cluster_1_model_summary.txt
+    ✓ Saved model summary: cluster_1_model_summary.txt
+    ✓ Saved coefficients: cluster_1_coefficients.csv
+
+    ============================================================
+    CLUSTER 2
+    ============================================================
+    Stations: 11
+    Observations: 44198
+    Creating subset spatial weights matrix...
+('WARNING: ', 'ARPAL_026', ' is an island (no neighbors)')
+    ✓ Subset weights created: 11 stations, 10 connections
+    ✓ Row-standardized (transform=R)
+    Fitting model...
+    ✓ Model fit successful
+    ✓ ρ (Cluster 2) = 0.680348
+
+================================================================================
+10. EXTRACTING COEFFICIENTS
+================================================================================
+    ✓ Extracted 24 coefficients
+
+    Spatial Lag Coefficient (ρ):
+        ρ = 0.680348
+
+    Significant Direct Effects (β):
+        temperature_2m                : β =  0.2497 ***
+        humidity_950                  : β =  0.1703 ***
+        wind_u_10m                    : β =  0.0543 ***
+        wind_v_10m                    : β = -0.1005 ***
+        uwind_850                     : β =  0.0975 ***
+        uwind_950                     : β = -0.3716 ***
+        Vwind_850                     : β = -0.1318 ***
+        Vwind_950                     : β =  0.3861 ***
+        total_precipitation           : β = -0.0569 ***
+        W_log_pm10                    : β =  0.6803 ***
+
+    Significant Indirect Effects (θ):
+        lag_temperature_2m            : θ = -0.0484 ***
+        lag_humidity_950              : θ = -0.0317 ***
+        lag_blh                       : θ = -0.0186 ***
+        lag_solar_radiation_downwards : θ =  0.0067 **
+        lag_wind_v_10m                : θ = -0.0059 ***
+        lag_uwind_850                 : θ = -0.0100 ***
+        lag_uwind_950                 : θ =  0.0415 ***
+        lag_Vwind_850                 : θ =  0.0328 ***
+        lag_Vwind_950                 : θ = -0.0134 ***
+
+================================================================================
+9. SAVING MODEL SUMMARY
+================================================================================
+    ✓ Saved to: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_durbin_model/cluster_2_model_summary.txt
+    ✓ Saved model summary: cluster_2_model_summary.txt
+    ✓ Saved coefficients: cluster_2_coefficients.csv
+
+    ============================================================
+    CLUSTER 3
+    ============================================================
+    Stations: 8
+    Observations: 32144
+    Creating subset spatial weights matrix...
+('WARNING: ', '502604', ' is an island (no neighbors)')
+    ✓ Subset weights created: 8 stations, 7 connections
+    ✓ Row-standardized (transform=R)
+    Fitting model...
+    ✓ Model fit successful
+    ✓ ρ (Cluster 3) = 0.742179
+
+================================================================================
+10. EXTRACTING COEFFICIENTS
+================================================================================
+    ✓ Extracted 24 coefficients
+
+    Spatial Lag Coefficient (ρ):
+        ρ = 0.742179
+
+    Significant Direct Effects (β):
+        temperature_2m                : β =  0.3386 ***
+        blh                           : β = -0.0581 ***
+        solar_radiation_downwards     : β =  0.0876 ***
+        wind_v_10m                    : β = -0.0204 ***
+        uwind_850                     : β =  0.0230 ***
+        uwind_950                     : β = -0.0229 ***
+        Vwind_950                     : β =  0.0165 ***
+        W_log_pm10                    : β =  0.7422 ***
+
+    Significant Indirect Effects (θ):
+        lag_temperature_2m            : θ = -0.0597 ***
+        lag_solar_radiation_downwards : θ = -0.0211 ***
+        lag_wind_u_10m                : θ = -0.0093 ***
+        lag_wind_v_10m                : θ =  0.0026 ***
+        lag_uwind_950                 : θ =  0.0159 ***
+        lag_Vwind_950                 : θ =  0.0052 ***
+        lag_total_precipitation       : θ = -0.0089 ***
+
+================================================================================
+9. SAVING MODEL SUMMARY
+================================================================================
+    ✓ Saved to: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_durbin_model/cluster_3_model_summary.txt
+    ✓ Saved model summary: cluster_3_model_summary.txt
+    ✓ Saved coefficients: cluster_3_coefficients.csv
+
+    ============================================================
+    CLUSTER 4
+    ============================================================
+    Stations: 7
+    Observations: 28126
+    Creating subset spatial weights matrix...
+    ✓ Subset weights created: 7 stations, 7 connections
+    ✓ Row-standardized (transform=R)
+    Fitting model...
+    ✓ Model fit successful
+    ✓ ρ (Cluster 4) = 0.715434
+
+================================================================================
+10. EXTRACTING COEFFICIENTS
+================================================================================
+    ✓ Extracted 24 coefficients
+
+    Spatial Lag Coefficient (ρ):
+        ρ = 0.715434
+
+    Significant Direct Effects (β):
+        temperature_2m                : β = -0.0978 ***
+        humidity_950                  : β =  0.0136 ***
+        solar_radiation_downwards     : β = -0.0773 ***
+        wind_u_10m                    : β =  0.0206 ***
+        Vwind_850                     : β =  0.0126 **
+        total_precipitation           : β = -0.0231 ***
+        W_log_pm10                    : β =  0.7154 ***
+
+    Significant Indirect Effects (θ):
+        lag_temperature_2m            : θ =  0.0174 ***
+        lag_humidity_950              : θ = -0.0050 ***
+        lag_blh                       : θ = -0.0103 ***
+        lag_solar_radiation_downwards : θ =  0.0085 ***
+        lag_wind_u_10m                : θ = -0.0063 ***
+        lag_wind_v_10m                : θ = -0.0050 ***
+        lag_uwind_850                 : θ =  0.0023 **
+        lag_uwind_950                 : θ = -0.0031 ***
+        lag_Vwind_950                 : θ =  0.0045 ***
+        lag_total_precipitation       : θ = -0.0056 ***
+
+================================================================================
+9. SAVING MODEL SUMMARY
+================================================================================
+    ✓ Saved to: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_durbin_model/cluster_4_model_summary.txt
+    ✓ Saved model summary: cluster_4_model_summary.txt
+    ✓ Saved coefficients: cluster_4_coefficients.csv
+
+    ============================================================
+    REGIME COMPARISON SUMMARY
+    ============================================================
+
+ cluster_id      rho  n_stations  n_obs
+          0 0.786992           5  20090
+          1 0.754649           6  24108
+          2 0.680348          11  44198
+          3 0.742179           8  32144
+          4 0.715434           7  28126
+
+    INTERPRETATION NOTES:
+    - High ρ suggests synchronous spatial correlation
+    - Low ρ may indicate directional transport (not simultaneous)
+    - Compare coefficient signs across clusters for physical coherence
+    - Check if global model sign conflicts resolve in cluster-specific models
+
+================================================================================
+14. RESIDUAL DIAGNOSTICS
+================================================================================
+    Residual Statistics:
+        Mean: 0.000000
+        Std: 0.252126
+        Min: -2.927129
+        Max: 2.036769
+
+    Testing for residual spatial autocorrelation...
+    (Should be non-significant if model captures spatial structure)
+
+    Moran's I on residuals: -0.142543
+    Expected I: -0.027778
+    P-value: 0.032000
+    ⚠ Residuals still show spatial autocorrelation
+
+================================================================================
+15. GENERATING VISUALIZATIONS
+================================================================================
+    Creating coefficient forest plot...
+    ✓ Saved: coefficient_forest_plot.png
+    Creating residual Q-Q plot...
+    ✓ Saved: residual_qq_plot.png
+
+    ✓ All visualizations complete!
+
+================================================================================
+16. SAVING RESULTS
+================================================================================
+    ✓ spillover_decomposition_observations.csv (148666 obs)
+    ✓ coefficients_table.csv (24 rows)
+    ✓ regime_comparison.csv (5 rows)
+    ✓ all_clusters_coefficients_combined.csv (120 rows)
+        Contains coefficients for 5 cluster-specific models
+
+    ✓ All results saved!
+
+================================================================================
+ANALYSIS COMPLETE
+================================================================================
+
+📊 KEY FINDINGS:
+    • Observations analyzed: 148,666
+    • Stations: 37
+    • Time periods: 4018
+    • Spatial lag coefficient (ρ): 0.138713
+    • Residual Moran's I: -0.142543 (p=0.0320)
+
+✅ ALL OUTPUTS GENERATED:
+    → Text log: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_durbin_model/sdm_analysis_log_20260210_104322.txt
+    → CSV results: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_durbin_model
+    → Visualizations: /Users/ettoremiglioranza/Projects/gar4ds/assets/spatial_durbin_model
+
+================================================================================

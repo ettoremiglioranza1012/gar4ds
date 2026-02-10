@@ -1,0 +1,269 @@
+================================================================================
+MODEL SPECIFICATION TESTS - SDM vs SAR vs SEM
+================================================================================
+
+Analysis Date: 2026-02-10 10:35:18.478171
+
+Outputs:
+    Text Log: /Users/ettoremiglioranza/Projects/gar4ds/results/model_specification_tests/lrt_tests_log_20260210_103518.txt
+    CSV Results: /Users/ettoremiglioranza/Projects/gar4ds/results/model_specification_tests
+
+================================================================================
+1. LOADING FILTERED PANEL DATA
+================================================================================
+    File: /Users/ettoremiglioranza/Projects/gar4ds/data/panel_data_matrix_filtered_for_collinearity_daily.parquet
+    ✓ Shape: (148666, 12) (observations × variables)
+    ✓ Index: ['date', 'station_id']
+    ✓ Columns: ['pm10', 'temperature_2m', 'humidity_950', 'blh', 'solar_radiation_downwards', 'wind_u_10m', 'wind_v_10m', 'uwind_850', 'uwind_950', 'Vwind_850', 'Vwind_950', 'total_precipitation']
+    ✓ MultiIndex confirmed: ['date', 'station_id']
+    ✓ Time periods: 4018
+    ✓ Stations: 37
+    ✓ Total observations: 148666
+
+================================================================================
+2. LOADING STATION METADATA
+================================================================================
+    File: /Users/ettoremiglioranza/Projects/gar4ds/data/pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson
+    ✓ Loaded 37 stations
+    ✓ Regions: ['Veneto', 'Lombardia', 'Trentino', 'Alto-Adige']
+
+================================================================================
+3. LOADING SPATIAL WEIGHTS MATRIX
+================================================================================
+    File: /Users/ettoremiglioranza/Projects/gar4ds/weights/spatial_weights_knn6.gal
+    ✓ Number of observations: 37
+    ✓ Total connections: 222
+    ✓ Average neighbors: 6.00
+    ✓ Transformation: O
+
+================================================================================
+4. PREPARING DATA FOR MODEL ESTIMATION
+================================================================================
+    Step 1: Log-transforming PM10
+        ✓ log_pm10 created (mean=3.031, std=0.650)
+
+    Step 2: Meteorological variables identified (11):
+        - temperature_2m
+        - humidity_950
+        - blh
+        - solar_radiation_downwards
+        - wind_u_10m
+        - wind_v_10m
+        - uwind_850
+        - uwind_950
+        - Vwind_850
+        - Vwind_950
+        - total_precipitation
+
+    Step 3: Checking station alignment
+        Panel stations: 37
+        Metadata stations: 37
+        ✓ Common stations: 37
+
+    Step 4: Standardizing meteorological variables
+        ✓ Standardized 11 variables (mean≈0, std≈1)
+
+    Step 5: Creating spatially lagged features (WX matrix)
+        Dimensions: 4018 day × 37 stations × 11 vars
+        Progress: 401/4018 day (10.0%)
+        Progress: 802/4018 day (20.0%)
+        Progress: 1203/4018 day (29.9%)
+        Progress: 1604/4018 day (39.9%)
+        Progress: 2005/4018 day (49.9%)
+        Progress: 2406/4018 day (59.9%)
+        Progress: 2807/4018 day (69.9%)
+        Progress: 3208/4018 day (79.8%)
+        Progress: 3609/4018 day (89.8%)
+        Progress: 4010/4018 day (99.8%)
+        ✓ Created 11 spatially lagged features
+
+    Step 6: Final dataset
+        ✓ Observations: 148,666
+        ✓ Stations: 37
+        ✓ Direct features (X): 11
+        ✓ Lagged features (WX): 11
+
+================================================================================
+5. FITTING SPATIAL DURBIN MODEL (SDM)
+================================================================================
+    Specification: y = ρWy + Xβ + WXθ + ε
+    Estimator: Panel Fixed Effects Spatial Lag
+
+    Data dimensions:
+        y: (148666, 1)
+        X (met + lagged): (148666, 22)
+        Features: 11 direct + 11 lagged = 22
+
+    Fitting SDM...
+    ✓ SDM estimation complete!
+    ✓ Log-likelihood: -904334.55
+    ✓ ρ (spatial lag): 0.138713
+    ✓ Parameters: 24
+
+================================================================================
+6. FITTING SPATIAL AUTOREGRESSIVE MODEL (SAR)
+================================================================================
+    Specification: y = ρWy + Xβ + ε
+    Note: Restricted SDM with θ=0 (no WX terms)
+
+    Data dimensions:
+        y: (148666, 1)
+        X (met only): (148666, 11)
+        Features: 11 direct effects
+
+    Fitting SAR...
+    ✓ SAR estimation complete!
+    ✓ Log-likelihood: -905079.35
+    ✓ ρ (spatial lag): 0.138710
+    ✓ Parameters: 13
+
+================================================================================
+7. FITTING SPATIAL ERROR MODEL (SEM)
+================================================================================
+    Specification: y = Xβ + u, where u = λWu + ε
+    Note: Spatial dependence only in error structure
+
+    Data dimensions:
+        y: (148666, 1)
+        X (met only): (148666, 11)
+        Features: 11 direct effects
+
+    Fitting SEM...
+    ✓ SEM estimation complete!
+    ✓ Log-likelihood: -906134.86
+    ✓ λ (spatial error): 0.141449
+    ✓ Parameters: 13
+
+================================================================================
+8. LIKELIHOOD RATIO TESTS
+================================================================================
+
+--------------------------------------------------------------------------------
+TEST 1: SDM vs SAR
+--------------------------------------------------------------------------------
+H₀: θ = 0 (spatially lagged covariates have no effect)
+H₁: θ ≠ 0 (spatially lagged covariates matter)
+
+If H₀ is rejected → SDM is preferred over SAR
+
+--- LRT: SDM vs SAR (H₀: θ=0) ---
+    Log-likelihood (unrestricted): -904334.55
+    Log-likelihood (restricted):   -905079.35
+    LRT statistic: 1489.60
+    Degrees of freedom: 11
+    P-value: 0.000000
+    Significance: ***
+    Conclusion: STRONGLY REJECT H₀
+
+--------------------------------------------------------------------------------
+TEST 2: SDM vs SEM
+--------------------------------------------------------------------------------
+H₀: θ + ρβ = 0 (spatial dependence only in errors)
+H₁: θ + ρβ ≠ 0 (spatial spillovers in covariates)
+
+If H₀ is rejected → SDM is preferred over SEM
+
+Note: This is a more complex restriction.
+      Direct test requires Wald test on θ + ρβ = 0.
+      LRT provides approximate comparison.
+
+--- LRT: SDM vs SEM (H₀: θ+ρβ=0) ---
+    Log-likelihood (unrestricted): -904334.55
+    Log-likelihood (restricted):   -906134.86
+    LRT statistic: 3600.62
+    Degrees of freedom: 11
+    P-value: 0.000000
+    Significance: ***
+    Conclusion: STRONGLY REJECT H₀
+
+================================================================================
+9. INFORMATION CRITERIA COMPARISON
+================================================================================
+    Lower values indicate better model fit
+
+    SDM:
+        Log-likelihood: -904334.55
+        Parameters: 24
+        AIC: 1808717.09
+        BIC: 1808954.92
+
+    SAR:
+        Log-likelihood: -905079.35
+        Parameters: 13
+        AIC: 1810184.69
+        BIC: 1810313.52
+
+    SEM:
+        Log-likelihood: -906134.86
+        Parameters: 13
+        AIC: 1812295.72
+        BIC: 1812424.54
+
+    Best Model:
+        By AIC: SDM
+        By BIC: SDM
+
+================================================================================
+10. COMPREHENSIVE SUMMARY
+================================================================================
+
+    LIKELIHOOD RATIO TESTS:
+    ----------------------------------------------------------------------------
+
+    1. SDM vs SAR (H₀: θ=0)
+        LRT statistic: 1489.60
+        P-value: 0.000000 ***
+        → STRONGLY REJECT H₀
+        ✓ SDM is PREFERRED over SAR
+
+    2. SDM vs SEM (H₀: θ+ρβ=0)
+        LRT statistic: 3600.62
+        P-value: 0.000000 ***
+        → STRONGLY REJECT H₀
+        ✓ SDM is PREFERRED over SEM
+
+    INFORMATION CRITERIA:
+    ----------------------------------------------------------------------------
+
+    Best model by AIC: SDM
+    Best model by BIC: SDM
+
+    ============================================================================
+
+    FINAL RECOMMENDATION:
+    ============================================================================
+
+    Evidence supporting SDM: 4/4 criteria
+
+    ✓✓✓ STRONG EVIDENCE FOR SDM
+        The Spatial Durbin Model is STRONGLY PREFERRED.
+        Spatially lagged covariates (WX) are essential for
+        capturing cross-border PM10 transport dynamics.
+
+================================================================================
+12. SAVING RESULTS
+================================================================================
+    Saving LRT test results...
+    ✓ lrt_test_results.csv
+    Saving information criteria...
+    ✓ information_criteria.csv
+    Creating summary report...
+    ✓ specification_test_summary.csv
+
+    ✓ All results saved!
+
+================================================================================
+ANALYSIS COMPLETE
+================================================================================
+
+✅ ALL TESTS COMPLETED:
+    → LRT: SDM vs SAR (p=0.000000)
+    → LRT: SDM vs SEM (p=0.000000)
+    → Best model (AIC): SDM
+    → Best model (BIC): SDM
+
+✅ ALL OUTPUTS GENERATED:
+    → Text log: /Users/ettoremiglioranza/Projects/gar4ds/results/model_specification_tests/lrt_tests_log_20260210_103518.txt
+    → CSV results: /Users/ettoremiglioranza/Projects/gar4ds/results/model_specification_tests
+
+================================================================================

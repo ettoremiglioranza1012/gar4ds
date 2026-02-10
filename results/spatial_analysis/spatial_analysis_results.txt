@@ -1,7 +1,7 @@
 ================================================================================
 SPATIAL ANALYSIS - PANEL DATA REFACTORED VERSION
 ================================================================================
-Analysis Date: 2026-02-09 16:54:27.604172
+Analysis Date: 2026-02-10 10:35:11.721201
 
 Outputs:
     Text Log: /Users/ettoremiglioranza/Projects/gar4ds/results/spatial_analysis/spatial_analysis_results.txt
@@ -11,12 +11,12 @@ Outputs:
 
 [1] LOADING PANEL DATA
 ================================================================================
-    Loading: /Users/ettoremiglioranza/Projects/gar4ds/data/panel_data_matrix_filtered_for_collinearity.parquet
-    ✓ Shape: (21275, 12) (observations × variables)
-    ✓ Index: ['week_start', 'station_id']
+    Loading: /Users/ettoremiglioranza/Projects/gar4ds/data/panel_data_matrix_filtered_for_collinearity_daily.parquet
+    ✓ Shape: (148666, 12) (observations × variables)
+    ✓ Index: ['date', 'station_id']
     ✓ Columns: ['pm10', 'temperature_2m', 'humidity_950', 'blh', 'solar_radiation_downwards', 'wind_u_10m', 'wind_v_10m', 'uwind_850', 'uwind_950', 'Vwind_850', 'Vwind_950', 'total_precipitation']
-    ✓ MultiIndex confirmed: ['week_start', 'station_id']
-    ✓ Time periods: 575
+    ✓ MultiIndex confirmed: ['date', 'station_id']
+    ✓ Time periods (days): 4018
     ✓ Stations: 37
 
 [2] LOADING STATION METADATA
@@ -37,7 +37,7 @@ Outputs:
 
 [3] CREATING CROSS-SECTIONAL VIEW
 ================================================================================
-    Strategy: Time-aggregate panel data (mean over all weeks)
+    Strategy: Time-aggregate panel data (mean over all days)
     Formula: X̄ᵢ = (1/T) Σₜ Xᵢₜ
 
     ✓ Aggregation complete
@@ -48,18 +48,18 @@ Outputs:
     Summary statistics (cross-sectional means):
                                     mean           std            min            max
 variable                                                                            
-pm10                           24.565096      6.696320      10.107019      34.913517
-temperature_2m                284.483648      3.177382     276.224672     288.104504
-humidity_950                   67.736532      3.470193      63.695027      75.564782
-blh                           349.167033     35.740398     299.788770     409.038184
-solar_radiation_downwards  563564.539872  13106.733842  543982.406177  597975.837725
-wind_u_10m                     -0.186730      0.320879      -1.287731       0.451317
-wind_v_10m                     -0.264367      0.229765      -0.632480       0.128578
-uwind_850                       0.226845      0.299888      -0.244244       0.738976
-uwind_950                      -0.509805      0.609089      -1.737769       0.472149
-Vwind_850                       0.150139      0.226998      -0.254407       0.659945
-Vwind_950                      -0.059454      0.193160      -0.280407       0.589831
-total_precipitation            24.145177      3.805680      16.029446      31.498919
+pm10                           24.538903      6.681662      10.118762      34.868725
+temperature_2m                284.501056      3.178825     276.238808     288.123436
+humidity_950                   67.748087      3.466499      63.711863      75.565357
+blh                           349.699127     35.795986     300.251800     409.669081
+solar_radiation_downwards  564131.193124  13140.194323  544491.847188  598569.179120
+wind_u_10m                     -0.187236      0.321353      -1.290308       0.450417
+wind_v_10m                     -0.263808      0.229709      -0.632726       0.128570
+uwind_850                       0.223839      0.297925      -0.247001       0.731192
+uwind_950                      -0.511700      0.610482      -1.741800       0.470829
+Vwind_850                       0.148611      0.226246      -0.254185       0.657278
+Vwind_950                      -0.059455      0.192602      -0.281551       0.587146
+total_precipitation             3.455320      0.544616       2.293910       4.507685
 
 [4] ALIGNING STATIONS WITH METADATA
 ================================================================================
@@ -108,93 +108,93 @@ total_precipitation            24.145177      3.805680      16.029446      31.49
     Interpretation: I > 0 → Clustering, I < 0 → Dispersion, I ≈ 0 → Random
 
     --- pm10 ---
-        Moran's I: 0.6813
+        Moran's I: 0.6819
         P-value: 0.0010
-        Z-score: 8.5741
+        Z-score: 8.9239
         Pattern: Clustered **
 
     --- temperature_2m ---
-        Moran's I: 0.5503
+        Moran's I: 0.5504
         P-value: 0.0010
-        Z-score: 7.3395
+        Z-score: 7.5365
         Pattern: Clustered **
 
     --- humidity_950 ---
-        Moran's I: 0.3240
-        P-value: 0.0030
-        Z-score: 4.2367
+        Moran's I: 0.3228
+        P-value: 0.0010
+        Z-score: 4.4641
         Pattern: Clustered **
 
     --- blh ---
-        Moran's I: 0.4856
+        Moran's I: 0.4858
         P-value: 0.0010
-        Z-score: 6.3019
+        Z-score: 6.2307
         Pattern: Clustered **
 
     --- solar_radiation_downwards ---
-        Moran's I: 0.3067
+        Moran's I: 0.3073
         P-value: 0.0020
-        Z-score: 4.1448
+        Z-score: 4.1567
         Pattern: Clustered **
 
     --- wind_u_10m ---
-        Moran's I: 0.5073
+        Moran's I: 0.5074
         P-value: 0.0010
-        Z-score: 7.2350
+        Z-score: 7.4229
         Pattern: Clustered **
 
     --- wind_v_10m ---
-        Moran's I: 0.6726
+        Moran's I: 0.6725
         P-value: 0.0010
-        Z-score: 9.0545
+        Z-score: 8.7758
         Pattern: Clustered **
 
     --- uwind_850 ---
-        Moran's I: 0.6067
+        Moran's I: 0.6048
         P-value: 0.0010
-        Z-score: 7.6739
+        Z-score: 7.9618
         Pattern: Clustered **
 
     --- uwind_950 ---
-        Moran's I: 0.6895
+        Moran's I: 0.6893
         P-value: 0.0010
-        Z-score: 9.4326
+        Z-score: 9.2548
         Pattern: Clustered **
 
     --- Vwind_850 ---
-        Moran's I: 0.4241
+        Moran's I: 0.4234
         P-value: 0.0010
-        Z-score: 6.0726
+        Z-score: 5.4688
         Pattern: Clustered **
 
     --- Vwind_950 ---
-        Moran's I: 0.3215
-        P-value: 0.0030
-        Z-score: 4.5451
+        Moran's I: 0.3210
+        P-value: 0.0020
+        Z-score: 4.6068
         Pattern: Clustered **
 
     --- total_precipitation ---
         Moran's I: 0.3018
-        P-value: 0.0050
-        Z-score: 4.0333
+        P-value: 0.0030
+        Z-score: 4.1482
         Pattern: Clustered **
 
 ================================================================================
 GLOBAL MORAN'S I SUMMARY
 ================================================================================
                  Variable  Morans_I  Expected_I  Variance_I  Z_score  P_value Significant   Pattern
-                     pm10  0.681338   -0.027778    0.006770 8.574148    0.001         Yes Clustered
-           temperature_2m  0.550323   -0.027778    0.006169 7.339521    0.001         Yes Clustered
-             humidity_950  0.324012   -0.027778    0.006802 4.236695    0.003         Yes Clustered
-                      blh  0.485592   -0.027778    0.006601 6.301937    0.001         Yes Clustered
-solar_radiation_downwards  0.306657   -0.027778    0.006416 4.144839    0.002         Yes Clustered
-               wind_u_10m  0.507317   -0.027778    0.005466 7.234950    0.001         Yes Clustered
-               wind_v_10m  0.672601   -0.027778    0.006026 9.054479    0.001         Yes Clustered
-                uwind_850  0.606739   -0.027778    0.006777 7.673857    0.001         Yes Clustered
-                uwind_950  0.689518   -0.027778    0.005764 9.432613    0.001         Yes Clustered
-                Vwind_850  0.424080   -0.027778    0.005608 6.072624    0.001         Yes Clustered
-                Vwind_950  0.321550   -0.027778    0.005902 4.545129    0.003         Yes Clustered
-      total_precipitation  0.301814   -0.027778    0.006642 4.033257    0.005         Yes Clustered
+                     pm10  0.681877   -0.027778    0.006315 8.923893    0.001         Yes Clustered
+           temperature_2m  0.550439   -0.027778    0.005953 7.536466    0.001         Yes Clustered
+             humidity_950  0.322788   -0.027778    0.006128 4.464074    0.001         Yes Clustered
+                      blh  0.485833   -0.027778    0.006703 6.230699    0.001         Yes Clustered
+solar_radiation_downwards  0.307328   -0.027778    0.006527 4.156656    0.002         Yes Clustered
+               wind_u_10m  0.507432   -0.027778    0.005230 7.422946    0.001         Yes Clustered
+               wind_v_10m  0.672466   -0.027778    0.006342 8.775845    0.001         Yes Clustered
+                uwind_850  0.604847   -0.027778    0.006275 7.961802    0.001         Yes Clustered
+                uwind_950  0.689268   -0.027778    0.006033 9.254783    0.001         Yes Clustered
+                Vwind_850  0.423391   -0.027778    0.006862 5.468778    0.001         Yes Clustered
+                Vwind_950  0.320965   -0.027778    0.005673 4.606820    0.002         Yes Clustered
+      total_precipitation  0.301814   -0.027778    0.006354 4.148181    0.003         Yes Clustered
 
 [8] CALCULATING LOCAL MORAN'S I (LISA)
 ================================================================================
@@ -222,16 +222,16 @@ solar_radiation_downwards  0.306657   -0.027778    0.006416 4.144839    0.002   
     --- humidity_950 ---
         High-High (hotspots): 6
         Low-Low (coldspots): 5
-        High-Low (outliers): 2
+        High-Low (outliers): 1
         Low-High (outliers): 1
-        Not significant: 23
+        Not significant: 24
 
     --- blh ---
         High-High (hotspots): 7
-        Low-Low (coldspots): 10
+        Low-Low (coldspots): 9
         High-Low (outliers): 0
         Low-High (outliers): 1
-        Not significant: 19
+        Not significant: 20
 
     --- solar_radiation_downwards ---
         High-High (hotspots): 3
@@ -241,11 +241,11 @@ solar_radiation_downwards  0.306657   -0.027778    0.006416 4.144839    0.002   
         Not significant: 26
 
     --- wind_u_10m ---
-        High-High (hotspots): 9
+        High-High (hotspots): 8
         Low-Low (coldspots): 5
         High-Low (outliers): 1
         Low-High (outliers): 0
-        Not significant: 22
+        Not significant: 23
 
     --- wind_v_10m ---
         High-High (hotspots): 13
@@ -256,10 +256,10 @@ solar_radiation_downwards  0.306657   -0.027778    0.006416 4.144839    0.002   
 
     --- uwind_850 ---
         High-High (hotspots): 8
-        Low-Low (coldspots): 12
+        Low-Low (coldspots): 13
         High-Low (outliers): 1
         Low-High (outliers): 0
-        Not significant: 16
+        Not significant: 15
 
     --- uwind_950 ---
         High-High (hotspots): 16
@@ -277,17 +277,17 @@ solar_radiation_downwards  0.306657   -0.027778    0.006416 4.144839    0.002   
 
     --- Vwind_950 ---
         High-High (hotspots): 5
-        Low-Low (coldspots): 4
-        High-Low (outliers): 0
-        Low-High (outliers): 0
-        Not significant: 28
-
-    --- total_precipitation ---
-        High-High (hotspots): 6
         Low-Low (coldspots): 3
         High-Low (outliers): 0
         Low-High (outliers): 0
-        Not significant: 28
+        Not significant: 29
+
+    --- total_precipitation ---
+        High-High (hotspots): 6
+        Low-Low (coldspots): 4
+        High-Low (outliers): 0
+        Low-High (outliers): 0
+        Not significant: 27
 
     ✓ LISA analysis complete for all variables
 
@@ -325,7 +325,7 @@ solar_radiation_downwards  0.306657   -0.027778    0.006416 4.144839    0.002   
         Cluster 4: 7 stations
 
     Performing PCA for 2D visualization...
-    ✓ PC1 explains 41.8% variance
+    ✓ PC1 explains 41.7% variance
     ✓ PC2 explains 25.0% variance
     ✓ Total explained: 66.8%
 
@@ -335,11 +335,11 @@ solar_radiation_downwards  0.306657   -0.027778    0.006416 4.144839    0.002   
 CLUSTER PROFILES - ATMOSPHERIC REGIMES
 ================================================================================
  Cluster  N_Stations  temperature_2m_mean  temperature_2m_std  humidity_950_mean  humidity_950_std   blh_mean   blh_std  solar_radiation_downwards_mean  solar_radiation_downwards_std  wind_u_10m_mean  wind_u_10m_std  wind_v_10m_mean  wind_v_10m_std  uwind_850_mean  uwind_850_std  uwind_950_mean  uwind_950_std  Vwind_850_mean  Vwind_850_std  Vwind_950_mean  Vwind_950_std  total_precipitation_mean  total_precipitation_std  pm10_mean  pm10_std
-       0           5           287.375119            0.564027          65.690391          0.227956 316.818266  9.434257                   565145.543774                    8076.757085        -0.833716        0.339190        -0.599856        0.025324        0.660840       0.078692       -1.554960       0.159428        0.171029       0.043272       -0.185159       0.064587                 23.396441                 1.313330  31.443761  2.775105
-       1           6           281.352343            2.513434          68.762641          4.403677 400.143981 10.079566                   560334.088698                    3982.397915        -0.085898        0.051547        -0.120183        0.136515       -0.127462       0.042010       -0.103441       0.056531       -0.100360       0.119134       -0.166987       0.079445                 21.357719                 0.428844  16.856078  1.729278
-       2          11           281.829716            2.615204          71.229772          2.435810 330.620352 16.388463                   556791.433546                   16650.376918         0.061884        0.168611        -0.110611        0.169589        0.200537       0.161348        0.066788       0.209587        0.004095       0.112811       -0.104354       0.093838                 28.779409                 1.703746  18.811221  3.676122
-       3           8           286.060405            0.465611          65.883337          2.089987 322.606262 12.945637                   560165.102005                    7431.825655        -0.135914        0.035719        -0.433782        0.113163        0.354914       0.154626       -0.535152       0.344615        0.258092       0.168871       -0.019387       0.149880                 24.280819                 1.555554  28.431908  2.348284
-       4           7           287.470744            0.190895          64.947102          0.709582 388.078721  8.287235                   579732.734166                    5523.350069        -0.259781        0.089544        -0.196318        0.190588        0.115520       0.377660       -0.988684       0.203058        0.456052       0.121152        0.147270       0.307434                 19.631854                 2.556464  30.882083  2.532733
+       0           5           287.394220            0.563736          65.723532          0.226651 317.286596  9.450057                   565745.516488                    8102.930827        -0.835104        0.340098        -0.599687        0.025531        0.652885       0.078865       -1.558315       0.160157        0.167871       0.043229       -0.186367       0.064608                  3.348172                 0.187945  31.380248  2.758339
+       1           6           281.368835            2.512197          68.764314          4.404534 400.778492 10.076494                   560877.696132                    3993.917433        -0.085533        0.051317        -0.119684        0.136404       -0.127692       0.042426       -0.103246       0.056371       -0.100701       0.118670       -0.166468       0.079500                  3.056418                 0.061370  16.841273  1.723562
+       2          11           281.845104            2.616321          71.236331          2.434144 331.137305 16.414030                   557322.656865                   16679.428226         0.061678        0.168267        -0.109868        0.169447        0.198538       0.160937        0.066185       0.209163        0.003358       0.112645       -0.103484       0.093903                  4.118507                 0.243816  18.797704  3.668700
+       3           8           286.078430            0.465734          65.903925          2.090780 323.089955 12.960851                   560728.514997                    7443.870598        -0.136114        0.035759        -0.432636        0.112867        0.351857       0.152744       -0.537246       0.345037        0.256218       0.168553       -0.018958       0.149773                  3.474731                 0.222609  28.418473  2.351449
+       4           7           287.490197            0.191307          64.949234          0.702827 388.647683  8.296313                   580354.720128                    5509.474533        -0.261221        0.089662        -0.196386        0.190798        0.112141       0.376783       -0.993132       0.203429        0.453827       0.120751        0.145828       0.306394                  2.809437                 0.365845  30.838288  2.527173
 
 [12] CREATING CLUSTERING VISUALIZATIONS
 ================================================================================
