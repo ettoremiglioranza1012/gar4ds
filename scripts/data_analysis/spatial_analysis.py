@@ -3,11 +3,11 @@ SPATIAL ANALYSIS - PANEL DATA
 ==============================
 
 This script performs spatial autocorrelation and clustering analysis on the 
-panel dataset (MultiIndex: week_start, station_id).
+panel dataset (MultiIndex: <period_column>, station_id).
 
 STRATEGY:
-1. Load panel_data_matrix.parquet (MultiIndex format)
-2. Time-aggregate to create cross-sectional "Station Profile" (mean over weeks)
+1. Load panel_data_matrix_<freq>.parquet (MultiIndex format)
+2. Time-aggregate to create cross-sectional "Station Profile" (mean over time periods)
 3. Build KNN spatial weights matrix (k=6) from station coordinates
 4. Calculate Moran's I (LISA) for PM10 and meteorological variables
 5. Perform multivariate K-Means clustering (atmospheric regime detection)
@@ -34,6 +34,11 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from pathlib import Path
 import sys
+
+# Import temporal configuration
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import get_config, get_output_path, TEMPORAL_FREQUENCY
+TEMP_CONFIG = get_config()
 
 # ============================================================================
 # DIRECTORY SETUP
@@ -96,9 +101,9 @@ def load_panel_data(data_path):
     # Check index structure
     if len(df.index.names) == 2:
         print(f"    ✓ MultiIndex confirmed: {df.index.names}")
-        n_weeks = df.index.get_level_values(0).nunique()
+        n_periods = df.index.get_level_values(0).nunique()
         n_stations = df.index.get_level_values(1).nunique()
-        print(f"    ✓ Time periods: {n_weeks}")
+        print(f"    ✓ Time periods ({TEMP_CONFIG['period_label_plural']}): {n_periods}")
         print(f"    ✓ Stations: {n_stations}")
     else:
         print(f"    ⚠ Warning: Expected MultiIndex, found {df.index.names}")
@@ -182,7 +187,7 @@ def create_cross_sectional_view(panel_df):
     """
     print("\n[3] CREATING CROSS-SECTIONAL VIEW")
     print("=" * 80)
-    print("    Strategy: Time-aggregate panel data (mean over all weeks)")
+    print(f"    Strategy: Time-aggregate panel data (mean over all {TEMP_CONFIG['period_label_plural']})")
     print("    Formula: X̄ᵢ = (1/T) Σₜ Xᵢₜ")
     
     # Group by station (level 1 of MultiIndex) and compute mean
@@ -905,7 +910,7 @@ def main():
             # STEP 1-2: LOAD DATA
             # ================================================================
             
-            panel_df = load_panel_data(PROJECT_DIR / 'data' / 'panel_data_matrix_filtered_for_collinearity.parquet')
+            panel_df = load_panel_data(PROJECT_DIR / 'data' / get_output_path('panel_data_matrix_filtered_for_collinearity'))
             meta_df = load_station_metadata(PROJECT_DIR / 'data' / 'pm10_era5_land_era5_reanalysis_blh_stations_metadata_with_elevation.geojson')
             
             # ================================================================

@@ -26,18 +26,25 @@ matplotlib.use('Agg')  # Non-interactive backend
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# Import temporal configuration
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import get_config, TEMPORAL_FREQUENCY, get_output_path
+
 # Configure paths
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data"
 RESULTS_DIR = BASE_DIR / "results" / "eda_analysis"
 ASSETS_DIR = BASE_DIR / "assets" / "eda_analysis"
 
+# Temporal configuration
+TEMP_CONFIG = get_config()
+
 # File paths
-PANEL_MATRIX = DATA_DIR / "panel_data_matrix_filtered_for_collinearity.parquet"
+PANEL_MATRIX = DATA_DIR / get_output_path('panel_data_matrix_filtered_for_collinearity')
 METADATA_GEOJSON = DATA_DIR / "pm10_era5_land_era5_reanalysis_blh_stations_metadata_with_elevation.geojson"
 
 # Output files
-OUTPUT_LOG = RESULTS_DIR / "eda_analysis.txt"
+OUTPUT_LOG = RESULTS_DIR / f"eda_analysis_{TEMPORAL_FREQUENCY}.txt"
 
 
 class OutputLogger:
@@ -348,16 +355,26 @@ def analyze_temporal_seasonality(df_panel):
     # Reset index to work with timestamps
     df_work = df_panel.reset_index()
     
+    # Get the temporal column name from config
+    period_col = TEMP_CONFIG['period_column']
+    
     # Extract temporal features
-    df_work['year'] = df_work['week_start'].dt.year
-    df_work['month'] = df_work['week_start'].dt.month
+    df_work['year'] = df_work[period_col].dt.year
+    df_work['month'] = df_work[period_col].dt.month
     df_work['season'] = df_work['month'].map({
         12: 'Winter', 1: 'Winter', 2: 'Winter',
         3: 'Spring', 4: 'Spring', 5: 'Spring',
         6: 'Summer', 7: 'Summer', 8: 'Summer',
         9: 'Autumn', 10: 'Autumn', 11: 'Autumn'
     })
-    df_work['week_of_year'] = df_work['week_start'].dt.isocalendar().week
+    
+    # Add temporal unit based on frequency
+    if TEMPORAL_FREQUENCY == 'weekly':
+        df_work['period_of_year'] = df_work[period_col].dt.isocalendar().week
+    elif TEMPORAL_FREQUENCY == 'daily':
+        df_work['period_of_year'] = df_work[period_col].dt.dayofyear
+    else:  # monthly
+        df_work['period_of_year'] = df_work['month']
     
     print_subsection("3.1 PM10 Seasonal Patterns")
     

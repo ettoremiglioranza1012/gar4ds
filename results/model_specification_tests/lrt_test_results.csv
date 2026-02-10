@@ -1,3 +1,3 @@
 test,null_hypothesis,df,lrt_statistic,p_value,significance,conclusion
-SDM vs SAR,θ = 0,11,732.7007331635104,0.0,***,STRONGLY REJECT H₀
-SDM vs SEM,θ + ρβ = 0,11,1029.824684639956,0.0,***,STRONGLY REJECT H₀
+SDM vs SAR,θ = 0,11,1489.600958159892,0.0,***,STRONGLY REJECT H₀
+SDM vs SEM,θ + ρβ = 0,11,3600.6240878789686,0.0,***,STRONGLY REJECT H₀

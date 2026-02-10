@@ -51,10 +51,30 @@ make analysis        # Exploratory & spatial analysis (2 scripts)
 make models          # Spatial econometric models (2 scripts)
 make maps            # Interactive visualizations
 
-# Option 3: Manual execution (see Docs/PIPELINE_DOCUMENTATION.md)
+# Option 3: Choose temporal aggregation frequency
+make build-panel-daily     # Daily aggregation (4,018 days)
+make build-panel-weekly    # Weekly aggregation (575 weeks) - DEFAULT
+make build-panel-monthly   # Monthly aggregation (132 months)
+# Then continue with: make elevation multicollinearity filter-collinearity analysis models
+
+# Option 4: Manual execution (see Docs/PIPELINE_DOCUMENTATION.md)
 uv run scripts/preprocessing/data_preprocessing.py
 # ... (see documentation for full sequence)
 ```
+
+### ⚙️ Temporal Aggregation Configuration
+
+The pipeline supports three temporal aggregation frequencies:
+- **Daily** (D): 4,018 time periods, 148,666 observations
+- **Weekly** (W-MON): 575 time periods, 21,275 observations - **DEFAULT**
+- **Monthly** (MS): 132 time periods, 4,884 observations
+
+Configuration is managed through `scripts/config.py`:
+```python
+TEMPORAL_FREQUENCY = 'weekly'  # Options: 'daily', 'weekly', 'monthly'
+```
+
+All downstream scripts automatically respect this configuration.
 
 ---
 
@@ -103,14 +123,17 @@ uv run scripts/preprocessing/data_preprocessing.py
 | Command | Description |
 |---------|-------------|
 | `make data-preprocess` | [1/9] Convert CSV to Parquet |
-| `make build-panel` | [2/9] Create panel matrix (20 vars) |
+| `make build-panel` | [2/9] Create panel matrix (20 vars, uses config) |
+| `make build-panel-daily` | [2/9] Build with DAILY aggregation |
+| `make build-panel-weekly` | [2/9] Build with WEEKLY aggregation (default) |
+| `make build-panel-monthly` | [2/9] Build with MONTHLY aggregation |
 | `make elevation` | [3/9] Add elevation data |
 | `make multicollinearity` | [4/9] VIF analysis |
-| `make filter-collinearity` | [5/9] Filter to 12 variables |
-| `make eda` | [6/9] Exploratory data analysis |
-| `make spatial-analysis` | [7/9] Spatial autocorrelation |
-| `make model-tests` | [8/9] Model specification tests |
-| `make sdm` | [9/9] Spatial Durbin Model |
+| `make filter-collinearity` | [5/9] Filter to 12 variables (respects config) |
+| `make eda` | [6/9] Exploratory data analysis (respects config) |
+| `make spatial-analysis` | [7/9] Spatial autocorrelation (respects config) |
+| `make model-tests` | [8/9] Model specification tests (respects config) |
+| `make sdm` | [9/9] Spatial Durbin Model (respects config) |
 
 ### Cleaning Targets
 
@@ -223,7 +246,7 @@ log(PM10ᵢₜ) = ρWyₜ + Xᵢₜβ + WXᵢₜθ + αᵢ + γₜ + εᵢₜ
 ### Variables (12 total)
 
 **Target:**
-- PM10 concentration (weekly mean)
+- PM10 concentration (temporal mean - daily/weekly/monthly depending on config)
 
 **Meteorological Predictors (11):**
 - Temperature: `temperature_2m`
@@ -320,7 +343,7 @@ If you use this code or methodology, please cite:
 **Ettore Miglioranza**
 
 - Project: GAR4DS - Pollution Corridors Analysis
-- Last Updated: 9 February 2026
+- Last Updated: 10 February 2026
 
 ---
 

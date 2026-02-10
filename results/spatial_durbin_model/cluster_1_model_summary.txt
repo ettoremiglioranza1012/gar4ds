@@ -2,7 +2,7 @@
 PANEL SPATIAL DURBIN MODEL - FULL SUMMARY
 ================================================================================
 
-Timestamp: 2026-02-09 16:54:54.712040
+Timestamp: 2026-02-10 10:47:03.142143
 
 REGRESSION
 ----------
@@ -10,41 +10,41 @@ SUMMARY OF OUTPUT: MAXIMUM LIKELIHOOD SPATIAL LAG PANEL - FIXED EFFECTS
 -----------------------------------------------------------------------
 Data set            :PM10_Cluster1
 Weights matrix      :     unknown
-Dependent Variable  :    log_pm10                Number of Observations:        3450
-Mean dependent var  :     -0.0000                Number of Variables   :          23
-S.D. dependent var  :      0.3868                Degrees of Freedom    :        3427
-Pseudo R-squared    :      0.8651
-Spatial Pseudo R-squared:  0.5526
-Sigma-square ML     :       0.021                Log likelihood        :  -12639.006
-S.E of regression   :       0.144                Akaike info criterion :   25324.012
-                                                 Schwarz criterion     :   25465.373
+Dependent Variable  :    log_pm10                Number of Observations:       24108
+Mean dependent var  :      0.0000                Number of Variables   :          23
+S.D. dependent var  :      0.5527                Degrees of Freedom    :       24085
+Pseudo R-squared    :      0.8279
+Spatial Pseudo R-squared:  0.3378
+Sigma-square ML     :       0.055                Log likelihood        : -123794.301
+S.E of regression   :       0.235                Akaike info criterion :  247634.602
+                                                 Schwarz criterion     :  247820.679
 
 ------------------------------------------------------------------------------------
             Variable     Coefficient       Std.Error     z-Statistic     Probability
 ------------------------------------------------------------------------------------
-      temperature_2m      -0.1491145       0.0532763      -2.7988902       0.0051279
-        humidity_950       0.0162917       0.0189531       0.8595805       0.3900203
-                 blh       0.0806024       0.0157977       5.1021528       0.0000003
-solar_radiation_downwards       0.1464713       0.0601927       2.4333745       0.0149588
-          wind_u_10m      -0.1093410       0.0216147      -5.0586409       0.0000004
-          wind_v_10m      -0.0952937       0.0195839      -4.8659146       0.0000011
-           uwind_850       0.4777533       0.0715463       6.6775427       0.0000000
-           uwind_950       0.1928525       0.0802076       2.4044159       0.0161983
-           Vwind_850       0.0208538       0.0203745       1.0235232       0.3060605
-           Vwind_950       0.3452631       0.0335631      10.2869858       0.0000000
- total_precipitation      -0.0211854       0.0128267      -1.6516592       0.0986040
-  lag_temperature_2m       0.0190741       0.0088327       2.1594843       0.0308126
-    lag_humidity_950      -0.0138788       0.0032632      -4.2530787       0.0000211
-             lag_blh      -0.0239489       0.0027687      -8.6499391       0.0000000
-lag_solar_radiation_downwards      -0.0278614       0.0101872      -2.7349410       0.0062391
-      lag_wind_u_10m       0.0280638       0.0060195       4.6621252       0.0000031
-      lag_wind_v_10m       0.0012505       0.0052917       0.2363072       0.8131943
-       lag_uwind_850      -0.0383027       0.0109543      -3.4966031       0.0004712
-       lag_uwind_950      -0.0806043       0.0200279      -4.0246046       0.0000571
-       lag_Vwind_850       0.0105371       0.0040854       2.5791821       0.0099035
-       lag_Vwind_950      -0.0378042       0.0103095      -3.6669244       0.0002455
-lag_total_precipitation       0.0006692       0.0021127       0.3167516       0.7514321
-          W_log_pm10       0.7359981       0.0076083      96.7368048       0.0000000
+      temperature_2m      -0.1200206       0.0226985      -5.2875928       0.0000001
+        humidity_950       0.0554695       0.0093632       5.9241800       0.0000000
+                 blh       0.0558057       0.0070675       7.8961359       0.0000000
+solar_radiation_downwards       0.0119442       0.0208210       0.5736613       0.5661970
+          wind_u_10m      -0.0324197       0.0133629      -2.4261012       0.0152620
+          wind_v_10m      -0.0774634       0.0109363      -7.0831703       0.0000000
+           uwind_850       0.2323370       0.0383611       6.0565818       0.0000000
+           uwind_950       0.1493645       0.0507458       2.9433866       0.0032464
+           Vwind_850       0.0779051       0.0112032       6.9538139       0.0000000
+           Vwind_950       0.3835153       0.0233601      16.4175182       0.0000000
+ total_precipitation      -0.0254562       0.0072625      -3.5051573       0.0004563
+  lag_temperature_2m       0.0178782       0.0037846       4.7238792       0.0000023
+    lag_humidity_950      -0.0169443       0.0016277     -10.4101722       0.0000000
+             lag_blh      -0.0178440       0.0012387     -14.4052785       0.0000000
+lag_solar_radiation_downwards      -0.0070733       0.0035494      -1.9928000       0.0462834
+      lag_wind_u_10m       0.0253737       0.0033572       7.5579981       0.0000000
+      lag_wind_v_10m      -0.0013211       0.0026294      -0.5024336       0.6153625
+       lag_uwind_850       0.0019262       0.0058342       0.3301539       0.7412837
+       lag_uwind_950      -0.1023383       0.0113868      -8.9874091       0.0000000
+       lag_Vwind_850       0.0079580       0.0023828       3.3398108       0.0008384
+       lag_Vwind_950      -0.0527850       0.0062278      -8.4757065       0.0000000
+lag_total_precipitation       0.0016110       0.0011950       1.3481471       0.1776111
+          W_log_pm10       0.7546491       0.0027122     278.2447126       0.0000000
 ------------------------------------------------------------------------------------
 Warning: Assuming panel is in long format.
 y[0:N] refers to T0, y[N+1:2N] refers to T1, etc.

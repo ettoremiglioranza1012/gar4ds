@@ -25,6 +25,12 @@ from pathlib import Path
 import json
 from branca.element import Element
 from branca.colormap import LinearColormap
+import sys
+
+# Import temporal configuration
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import get_config, get_output_path
+TEMP_CONFIG = get_config()
 
 # ============================================================================
 # DIRECTORY SETUP
@@ -55,7 +61,7 @@ def load_station_metadata():
 
 def load_panel_data():
     """Load panel data for temporal analysis"""
-    panel_path = DATA_DIR / 'panel_data_matrix_filtered_for_collinearity.parquet'
+    panel_path = DATA_DIR / get_output_path('panel_data_matrix_filtered_for_collinearity')
     if panel_path.exists():
         return pd.read_parquet(panel_path)
     return None
@@ -64,14 +70,15 @@ def load_panel_data():
 def compute_seasonal_data(panel_df, stations_gdf):
     """Compute seasonal statistics for each station"""
     
-    # Reset index to access week_start
+    # Reset index to access temporal column
     df = panel_df.reset_index()
     
-    # Convert week_start to datetime if needed
-    df['week_start'] = pd.to_datetime(df['week_start'])
+    # Convert temporal column to datetime if needed
+    period_col = TEMP_CONFIG['period_column']
+    df[period_col] = pd.to_datetime(df[period_col])
     
     # Extract month and assign season
-    df['month'] = df['week_start'].dt.month
+    df['month'] = df[period_col].dt.month
     
     def get_season(month):
         if month in [12, 1, 2]:

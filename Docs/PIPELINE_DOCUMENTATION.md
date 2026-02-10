@@ -1,7 +1,38 @@
 # GAR4DS Data Processing Pipeline
 **Complete Chain of Dependencies**
 
-Generated: 2026-02-06
+Generated: 2026-02-10
+
+---
+
+## ⚙️ Temporal Aggregation Configuration
+
+The pipeline supports **three temporal aggregation frequencies**:
+
+| Frequency | Resample Code | Time Periods | Total Observations | Period Column |
+|-----------|---------------|--------------|---------------------|---------------|
+| **Daily** | D | 4,018 days | 148,666 | `date` |
+| **Weekly** | W-MON | 575 weeks | 21,275 | `week_start` |
+| **Monthly** | MS | 132 months | 4,884 | `month_start` |
+
+**Configuration:** Managed through `scripts/config.py`
+```python
+TEMPORAL_FREQUENCY = 'weekly'  # Options: 'daily', 'weekly', 'monthly'
+```
+
+**All downstream scripts automatically respect this configuration**, including:
+- `filter_multicollinearity.py` - reads/writes frequency-specific files
+- `exploratory_data_analysis.py` - adapts temporal analysis to frequency
+- `spatial_analysis.py` - uses dynamic period labels
+- `spatial_durbin_model.py` - computes WX matrix for configured time periods
+- `model_specification_tests.py` - tests models at configured frequency
+
+**Makefile targets for frequency selection:**
+```bash
+make build-panel-daily     # Sets config to 'daily' and builds panel
+make build-panel-weekly    # Sets config to 'weekly' and builds panel (default)
+make build-panel-monthly   # Sets config to 'monthly' and builds panel
+```
 
 ---
 
@@ -57,14 +88,29 @@ uv run scripts/preprocessing/data_preprocessing.py
 
 ### 2. build_panel_matrix.py
 **Location:** `scripts/preprocessing/build_panel_matrix.py`  
-**Purpose:** Create panel data matrix with MultiIndex (week_start, station_id)
+**Purpose:** Create panel data matrix with MultiIndex (period_column, station_id)
 
 **Inputs:**
 - `data/pm10_era5_land_era5_reanalysis_blh.parquet`
+- `scripts/config.py` (for temporal frequency configuration)
 
 **Outputs:**
-- `data/panel_data_matrix.parquet` (21,275 obs × 20 vars)
-- `results/dataset_documentation/panel_matrix_info_*.txt`
+- `data/panel_data_matrix_{frequency}.parquet`
+  - Daily: 148,666 obs × 20 vars
+  - Weekly: 21,275 obs × 20 vars (default)
+  - Monthly: 4,884 obs × 20 vars
+- `results/dataset_documentation/panel_matrix_info_{frequency}_*.txt`
+
+**Configuration:**
+The temporal aggregation frequency is controlled by `scripts/config.py`:
+```python
+TEMPORAL_FREQUENCY = 'weekly'  # 'daily', 'weekly', or 'monthly'
+```
+
+**MultiIndex structure:**
+- Daily: (`date`, `station_id`)  
+- Weekly: (`week_start`, `station_id`)  
+- Monthly: (`month_start`, `station_id`)
 
 **Variables included (20):**
 - Target: pm10
@@ -76,6 +122,13 @@ uv run scripts/preprocessing/data_preprocessing.py
 
 **Run command:**
 ```bash
+# Using Makefile (recommended)
+make build-panel              # Uses current config setting
+make build-panel-daily        # Forces daily aggregation
+make build-panel-weekly       # Forces weekly aggregation (default)
+make build-panel-monthly      # Forces monthly aggregation
+
+# Or direct execution
 uv run scripts/preprocessing/build_panel_matrix.py
 ```
 
@@ -136,11 +189,12 @@ uv run scripts/preprocessing/multicollinearity_analysis.py
 **Purpose:** Create filtered dataset based on multicollinearity analysis
 
 **Inputs:**
-- `data/panel_data_matrix.parquet` (20 variables)
+- `data/panel_data_matrix_{frequency}.parquet` (20 variables)
+- `scripts/config.py` (for frequency)
 
 **Outputs:**
-- `data/panel_data_matrix_filtered_for_collinearity.parquet` (12 variables)
-- `results/dataset_documentation/multicollinearity_filter_*.txt`
+- `data/panel_data_matrix_filtered_for_collinearity_{frequency}.parquet` (12 variables)
+- `results/dataset_documentation/multicollinearity_filter_{frequency}_*.txt`
 
 **Variables KEPT (12):**
 1. pm10 (target)
@@ -171,8 +225,9 @@ uv run scripts/preprocessing/filter_multicollinearity.py
 **Purpose:** Validate physical relationships and data quality
 
 **Inputs:**
-- `data/panel_data_matrix_filtered_for_collinearity.parquet` (12 vars)
+- `data/panel_data_matrix_filtered_for_collinearity_{frequency}.parquet` (12 vars)
 - `data/pm10_era5_land_era5_reanalysis_blh_stations_metadata_with_elevation.geojson`
+- `scripts/config.py` (for frequency-aware temporal analysis)
 
 **Outputs:**
 - `results/eda_analysis/eda_analysis.txt`
@@ -197,7 +252,8 @@ uv run scripts/data_analysis/exploratory_data_analysis.py
 **Purpose:** Spatial autocorrelation analysis and weights matrix generation
 
 **Inputs:**
-- `data/panel_data_matrix_filtered_for_collinearity.parquet` (12 vars)
+- `data/panel_data_matrix_filtered_for_collinearity_{frequency}.parquet` (12 vars)
+- `scripts/config.py` (for dynamic period labels and file paths)
 - `data/pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson`
 
 **Outputs:**
@@ -226,8 +282,9 @@ uv run scripts/data_analysis/spatial_analysis.py
 **Purpose:** Test which spatial model specification fits best (SLX, SAR, SEM, SDM, etc.)
 
 **Inputs:**
-- `data/panel_data_matrix_filtered_for_collinearity.parquet`
+- `data/panel_data_matrix_filtered_for_collinearity_{frequency}.parquet`
 - `weights/spatial_weights_knn6.gal`
+- `scripts/config.py` (for frequency configuration)
 
 **Outputs:**
 - `results/model_specification_tests/lrt_test_results.csv`
@@ -286,7 +343,9 @@ Where:
   - `assets/spatial_durbin_model/coefficient_forest_plot.png`
   - `assets/spatial_durbin_model/residual_qq_plot.png`
 
-**Key Features (Updated 9 Feb 2026):**
+**Key Features (Updated 10 Feb 2026):**
+- Supports daily/weekly/monthly temporal aggregation via config
+- Dynamically computes WX matrix for configured time periods
 - Fits separate SDM models for ALL 5 atmospheric clusters
 - Tests hypothesis: global model averages over distinct physical regimes
 - Preserves temporal dynamics (no mean aggregation)
@@ -310,10 +369,12 @@ ls -lh weights/spatial_weights_knn6.gal
 ```
 
 ### Expected file sizes:
-- panel_data_matrix.parquet: ~2.0 MB (20 variables)
-- panel_data_matrix_filtered_for_collinearity.parquet: ~1.9 MB (12 variables)
+- panel_data_matrix_daily.parquet: ~21 MB (148,666 obs)
+- panel_data_matrix_weekly.parquet: ~3 MB (21,275 obs)
+- panel_data_matrix_monthly.parquet: ~700 KB (4,884 obs)
+- panel_data_matrix_filtered_for_collinearity_{frequency}.parquet: varies by frequency
 - metadata_with_elevation.geojson: ~10 KB
-- spatial_weights_knn6.gal: ~3 KB
+- spatial_weights_knn6.gal: ~2 KB
 
 ### Variable reduction summary:
 - Original (raw CSV): ~30 columns
@@ -459,4 +520,4 @@ All pipeline stages verified:
 - 2 visualization files (plots)
 - 2 interactive HTML maps
 
-Last updated: **9 February 2026**
+Last updated: **10 February 2026**

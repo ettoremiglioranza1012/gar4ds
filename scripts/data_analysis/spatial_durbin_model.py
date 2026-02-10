@@ -61,6 +61,11 @@ import sys
 import warnings
 warnings.filterwarnings('ignore')
 
+# Import temporal configuration
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import get_config, get_output_path, TEMPORAL_FREQUENCY
+TEMP_CONFIG = get_config()
+
 # ============================================================================
 # DIRECTORY SETUP
 # ============================================================================
@@ -125,10 +130,10 @@ def load_panel_data(data_path):
     print(f"    ✓ Columns: {list(df.columns)}")
     
     if len(df.index.names) == 2:
-        n_weeks = df.index.get_level_values(0).nunique()
+        n_periods = df.index.get_level_values(0).nunique()
         n_stations = df.index.get_level_values(1).nunique()
         print(f"    ✓ MultiIndex confirmed: {df.index.names}")
-        print(f"    ✓ Time periods: {n_weeks}")
+        print(f"    ✓ Time periods ({TEMP_CONFIG['period_label_plural']}): {n_periods}")
         print(f"    ✓ Stations: {n_stations}")
         print(f"    ✓ Total observations: {len(df)}")
     
@@ -261,19 +266,20 @@ def create_spatially_lagged_features(panel_df, met_vars, w, common_stations):
     """
     print_header("7. CREATING SPATIALLY LAGGED FEATURES (WX MATRIX)")
     print("    Purpose: Manual Spatial Durbin Model construction")
-    print("    Method: Compute W @ X for each of 575 weeks")
+    print(f"    Method: Compute W @ X for each of the {TEMP_CONFIG['period_label_plural']}")
     
-    # Get unique weeks
-    weeks = panel_df.index.get_level_values('week_start').unique().sort_values()
-    n_weeks = len(weeks)
+    # Get unique time periods
+    period_col = TEMP_CONFIG['period_column']
+    periods = panel_df.index.get_level_values(period_col).unique().sort_values()
+    n_periods = len(periods)
     n_stations = len(common_stations)
     n_vars = len(met_vars)
     
     print(f"\n    Dimensions:")
-    print(f"        Weeks: {n_weeks}")
+    print(f"        {TEMP_CONFIG['period_label_plural'].capitalize()}: {n_periods}")
     print(f"        Stations: {n_stations}")
     print(f"        Variables: {n_vars}")
-    print(f"        Total WX entries: {n_weeks * n_stations * n_vars:,}")
+    print(f"        Total WX entries: {n_periods * n_stations * n_vars:,}")
     
     # Create mapping of station_id to weights matrix index
     w_ids = w.id_order
@@ -285,35 +291,35 @@ def create_spatially_lagged_features(panel_df, met_vars, w, common_stations):
         panel_df[lag_var] = np.nan
     
     print("\n    Computing spatial lags...")
-    progress_interval = max(1, n_weeks // 10)  # Show progress every 10%
+    progress_interval = max(1, n_periods // 10)  # Show progress every 10%
     
-    for i, week in enumerate(weeks):
-        # Extract cross-section for this week
-        week_data = panel_df.xs(week, level='week_start')
+    for i, period in enumerate(periods):
+        # Extract cross-section for this time period
+        period_data = panel_df.xs(period, level=period_col)
         
         # Align with weights matrix order
-        week_data_aligned = week_data.reindex(w_ids)
+        period_data_aligned = period_data.reindex(w_ids)
         
         # Extract meteorological variables as matrix
-        X_week = week_data_aligned[met_vars].values  # Shape: (n_stations, n_vars)
+        X_period = period_data_aligned[met_vars].values  # Shape: (n_stations, n_vars)
         
         # Compute spatial lag: WX = W @ X
-        WX_week = np.zeros_like(X_week)
+        WX_period = np.zeros_like(X_period)
         for j, station in enumerate(w_ids):
             neighbors = w.neighbors[station]
             weights = w.weights[station]
             neighbor_indices = [station_to_idx[n] for n in neighbors]
-            WX_week[j, :] = np.sum([weights[k] * X_week[neighbor_indices[k], :] 
+            WX_period[j, :] = np.sum([weights[k] * X_period[neighbor_indices[k], :] 
                                     for k in range(len(neighbors))], axis=0)
         
         # Store lagged features back in panel
         for v, lag_var in enumerate(lagged_vars):
             for s, station in enumerate(w_ids):
-                panel_df.loc[(week, station), lag_var] = WX_week[s, v]
+                panel_df.loc[(period, station), lag_var] = WX_period[s, v]
         
         # Progress indicator
         if (i + 1) % progress_interval == 0:
-            print(f"        Progress: {i+1}/{n_weeks} weeks ({(i+1)/n_weeks*100:.1f}%)")
+            print(f"        Progress: {i+1}/{n_periods} {TEMP_CONFIG['period_label_plural']} ({(i+1)/n_periods*100:.1f}%)")
     
     print(f"\n    ✓ Created {len(lagged_vars)} spatially lagged features")
     print("    ✓ Feature set:")
@@ -833,7 +839,7 @@ def main():
     
     try:
         # 1. Load panel data
-        panel_df = load_panel_data(DATA_DIR / 'panel_data_matrix_filtered_for_collinearity.parquet')
+        panel_df = load_panel_data(DATA_DIR / get_output_path('panel_data_matrix_filtered_for_collinearity'))
         
         # 2. Load metadata
         meta_df = load_station_metadata(DATA_DIR / 'pm10_era5_land_era5_reanalysis_blh_stations_metadata.geojson')

@@ -23,7 +23,12 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 import warnings
+import sys
 warnings.filterwarnings('ignore')
+
+# Import temporal configuration
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import get_output_path
 
 # ============================================================================
 # CONFIGURATION
@@ -71,7 +76,7 @@ def load_panel_data():
     """Load panel data matrix"""
     print_section("1. LOADING DATA")
     
-    panel_path = DATA_DIR / 'panel_data_matrix.parquet'
+    panel_path = DATA_DIR / get_output_path('panel_data_matrix')
     print(f"Loading: {panel_path.name}")
     
     df = pd.read_parquet(panel_path)
