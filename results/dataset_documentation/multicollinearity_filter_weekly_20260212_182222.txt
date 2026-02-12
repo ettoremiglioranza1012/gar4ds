@@ -1,0 +1,186 @@
+
+================================================================================
+  MULTICOLLINEARITY-BASED DATASET FILTERING
+================================================================================
+
+Timestamp: 2026-02-12 18:22:22
+Input: panel_data_matrix_weekly.parquet
+Output: panel_data_matrix_filtered_for_collinearity_weekly.parquet
+
+--- 1. LOADING ORIGINAL DATASET ---
+
+Loaded: panel_data_matrix_weekly.parquet
+  Shape: (21275, 20)
+  Index: ['week_start', 'station_id']
+  Variables (20): ['Vwind_550', 'Vwind_850', 'Vwind_950', 'blh', 'humidity_550', 'humidity_850', 'humidity_950', 'pm10', 'solar_radiation_downwards', 'surface_pressure', 'temperature_2m', 'temperature_550', 'temperature_850', 'temperature_950', 'total_precipitation', 'uwind_550', 'uwind_850', 'uwind_950', 'wind_u_10m', 'wind_v_10m']
+
+--- 2. VERIFYING VARIABLE LISTS ---
+
+Variables marked for REMOVAL (8):
+  - temperature_550                ✓ FOUND
+  - temperature_850                ✓ FOUND
+  - temperature_950                ✓ FOUND
+  - surface_pressure               ✓ FOUND
+  - humidity_550                   ✓ FOUND
+  - humidity_850                   ✓ FOUND
+  - uwind_550                      ✓ FOUND
+  - Vwind_550                      ✓ FOUND
+
+Variables marked to KEEP (12):
+  - pm10                           ✓ FOUND
+  - temperature_2m                 ✓ FOUND
+  - humidity_950                   ✓ FOUND
+  - blh                            ✓ FOUND
+  - solar_radiation_downwards      ✓ FOUND
+  - wind_u_10m                     ✓ FOUND
+  - wind_v_10m                     ✓ FOUND
+  - uwind_850                      ✓ FOUND
+  - uwind_950                      ✓ FOUND
+  - Vwind_850                      ✓ FOUND
+  - Vwind_950                      ✓ FOUND
+  - total_precipitation            ✓ FOUND
+
+--- 3. APPLYING MULTICOLLINEARITY FILTER ---
+
+✓ Filtered dataset created
+  Original variables: 20
+  Removed variables: 8
+  Retained variables: 12
+  Reduction: 40.0%
+
+--- 4. FILTERED DATASET SUMMARY ---
+
+Shape: (21275, 12) (observations × variables)
+Index: ['week_start', 'station_id']
+
+Variable list (12):
+   1. Vwind_850
+   2. Vwind_950
+   3. blh
+   4. humidity_950
+   5. pm10
+   6. solar_radiation_downwards
+   7. temperature_2m
+   8. total_precipitation
+   9. uwind_850
+  10. uwind_950
+  11. wind_u_10m
+  12. wind_v_10m
+
+✓ No missing values detected
+
+Descriptive Statistics:
+                             count           mean            std           min           max
+variable                                                                                    
+pm10                       21275.0      24.565096      14.894545      2.169643  1.731071e+02
+temperature_2m             21275.0     284.483648       8.049754    257.379640  3.039881e+02
+humidity_950               21275.0      67.736532      10.662143     21.604874  9.814774e+01
+blh                        21275.0     349.167033     179.905672     14.937296  1.123292e+03
+solar_radiation_downwards  21275.0  563564.539872  274159.415615  72795.547619  1.132927e+06
+wind_u_10m                 21275.0      -0.186730       0.510444     -5.897105  1.916362e+00
+wind_v_10m                 21275.0      -0.264367       0.466683     -3.459145  1.967181e+00
+uwind_850                  21275.0       0.226845       1.935861    -12.120385  1.198860e+01
+uwind_950                  21275.0      -0.509805       1.338284    -11.965958  8.887606e+00
+Vwind_850                  21275.0       0.150139       1.586002    -10.294623  9.679311e+00
+Vwind_950                  21275.0      -0.059454       0.816979     -6.141028  6.877858e+00
+total_precipitation        21275.0      24.145177      26.592498      0.000000  2.708764e+02
+
+--- 5. VARIABLE CATEGORIZATION ---
+
+
+Target:
+  ✓ pm10
+
+Temperature:
+  ✓ temperature_2m
+
+Humidity:
+  ✓ humidity_950
+
+Boundary Layer:
+  ✓ blh
+
+Radiation:
+  ✓ solar_radiation_downwards
+
+Precipitation:
+  ✓ total_precipitation
+
+Surface Winds:
+  ✓ wind_u_10m
+  ✓ wind_v_10m
+
+Upper-Level Winds:
+  ✓ uwind_850
+  ✓ uwind_950
+  ✓ Vwind_850
+  ✓ Vwind_950
+
+--- 6. SAVING FILTERED DATASET ---
+
+✓ Saved filtered dataset to: panel_data_matrix_filtered_for_collinearity_weekly.parquet
+  Location: /Users/ettoremiglioranza/Projects/gar4ds/data/panel_data_matrix_filtered_for_collinearity_weekly.parquet
+  Size: 1.86 MB
+  Format: Parquet (compressed)
+
+--- 7. DROPPED VARIABLES SUMMARY ---
+
+Removed variables with justifications:
+
+  temperature_550:
+    VIF: 58255
+    Reason: Extreme VIF; r=0.85 with temp_2m
+
+  temperature_850:
+    VIF: 331115
+    Reason: Extreme VIF; r=0.96 with temp_2m
+
+  temperature_950:
+    VIF: 307653
+    Reason: Extreme VIF; r=0.93 with temp_2m
+
+  surface_pressure:
+    VIF: 2335
+    Reason: High VIF; indirect effects captured
+
+  humidity_550:
+    VIF: 35
+    Reason: Moderate VIF; upper-level less relevant
+
+  humidity_850:
+    VIF: 251
+    Reason: High VIF; r=0.80 with humidity_950
+
+  uwind_550:
+    VIF: 3.8
+    Reason: Above boundary layer; minimal surface impact
+
+  Vwind_550:
+    VIF: 2.7
+    Reason: Above boundary layer; minimal surface impact
+
+--- 8. VERIFICATION ---
+
+✓ Index integrity verified
+✓ All intended variables removed
+✓ All intended variables retained
+
+✓ Filtering complete and verified
+
+================================================================================
+  FILTERING COMPLETE
+================================================================================
+
+Original dataset: panel_data_matrix_weekly.parquet
+  Variables: 20
+
+Filtered dataset: panel_data_matrix_filtered_for_collinearity_weekly.parquet
+  Variables: 12
+
+Variables removed: 8
+Reduction: 40.0%
+
+Log saved to: /Users/ettoremiglioranza/Projects/gar4ds/results/dataset_documentation/multicollinearity_filter_weekly_20260212_182222.txt
+
+Timestamp: 2026-02-12 18:22:22
+================================================================================

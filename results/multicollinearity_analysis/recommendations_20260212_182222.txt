@@ -1,0 +1,30 @@
+MULTICOLLINEARITY ANALYSIS RECOMMENDATIONS
+================================================================================
+
+Analysis Date: 2026-02-12 18:22:22
+
+1. TEMPERATURE
+   Issue: high_correlation
+   Reason: High correlation (|r| > 0.85)
+   Variables to remove: temperature_550, temperature_850, temperature_2m
+
+2. TEMPERATURE
+   Issue: high_dimensionality
+   Reason: PCA shows redundancy in dimensions
+   Dimension reduction: 4 → 2
+
+3. U_WIND
+   Issue: high_dimensionality
+   Reason: PCA shows redundancy in dimensions
+   Dimension reduction: 4 → 3
+
+4. V_WIND
+   Issue: high_dimensionality
+   Reason: PCA shows redundancy in dimensions
+   Dimension reduction: 4 → 3
+
+5. SURFACE
+   Issue: high_dimensionality
+   Reason: PCA shows redundancy in dimensions
+   Dimension reduction: 4 → 3
+

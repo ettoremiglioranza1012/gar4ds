@@ -21,7 +21,7 @@ Note: Changing frequency requires rebuilding panel matrix and re-running all ana
 # ============================================================================
 
 # Select temporal aggregation frequency
-TEMPORAL_FREQUENCY = 'daily'
+TEMPORAL_FREQUENCY = 'weekly'
 
 # ============================================================================
 # FREQUENCY SPECIFICATIONS (Do not modify)
